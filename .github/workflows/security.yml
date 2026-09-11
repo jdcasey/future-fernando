@@ -5,11 +5,21 @@ name: security
 #                   unquoted-var / word-splitting class of bugs).
 #   - gitleaks    : secret scan across the full commit history.
 # (CodeQL is intentionally omitted — it has no shell/bash support.)
+#
+# Both scanners FLOAT to their latest release rather than being pinned. For a
+# non-sensitive public repo the priority is detection freshness (Axis 1): each
+# run should use current secret-detection rules and shell checks so it protects
+# anyone using the tool, not just what was known at pin time. The weekly
+# schedule re-scans existing code/history against whatever rules are current.
+# Trade-off accepted: builds are not bit-for-bit reproducible, and a tool
+# release could in principle change behavior under us.
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 9 * * 1'   # Mondays 09:17 UTC — re-scan with current rules
   workflow_dispatch:
 
 # Least privilege: these jobs only read the repo.
@@ -20,47 +30,42 @@ jobs:
   shellcheck:
     name: ShellCheck (static analysis)
     runs-on: ubuntu-latest
-    env:
-      # Pinned + checksum-verified so CI matches local exactly. The runner's
-      # bundled ShellCheck version drifts and toggles info-level checks (e.g.
-      # SC2015), which otherwise makes "clean locally" fail in CI.
-      # To bump: set the version, download the linux.x86_64.tar.xz, update sha256.
-      SHELLCHECK_VERSION: 0.11.0
-      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
     steps:
       - uses: actions/checkout@v7
-      - name: Install ShellCheck (pinned, verified)
+      - name: Install ShellCheck (latest)
         run: |
           set -euo pipefail
-          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          url=$(curl -sSL https://api.github.com/repos/koalaman/shellcheck/releases/latest \
+            | jq -r '.assets[] | select(.name | test("linux\\.x86_64\\.tar\\.xz$")) | .browser_download_url' | head -1)
+          echo "downloading: $url"
           curl -sSL "$url" -o shellcheck.tar.xz
-          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
           tar -xf shellcheck.tar.xz
-          sudo install "shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          sudo install shellcheck-v*/shellcheck /usr/local/bin/shellcheck
           shellcheck --version
       - name: Lint shell scripts
-        run: shellcheck -x bin/* install.sh uninstall.sh lib/*.sh
+        # --severity=warning: adopt new warning/error checks as ShellCheck evolves
+        # (Axis 1) while info-level style churn (e.g. SC2015) can't spuriously
+        # break the build when the floated version changes its defaults.
+        run: shellcheck --severity=warning -x bin/* install.sh uninstall.sh lib/*.sh
 
   gitleaks:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
-    env:
-      # Pinned + checksum-verified for reproducibility and supply-chain safety.
-      # To bump: set the new version, download the linux_x64 tarball, and update
-      # the sha256 to match that artifact.
-      GITLEAKS_VERSION: 8.30.1
-      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # full history so the scan covers every commit
-      - name: Install gitleaks (pinned, verified)
+      - name: Install gitleaks (latest)
         run: |
           set -euo pipefail
-          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          url=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+            | jq -r '.assets[] | select(.name | test("linux_(x64|amd64)\\.tar\\.gz$")) | .browser_download_url' | head -1)
+          echo "downloading: $url"
           curl -sSL "$url" -o gitleaks.tgz
-          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
           tar -xzf gitleaks.tgz gitleaks
           sudo install gitleaks /usr/local/bin/gitleaks
+          gitleaks version
       - name: Scan history for secrets
-        run: gitleaks detect --source . --redact --no-banner
+        # `git` (not the deprecated `detect`) so a future floated release won't
+        # remove the subcommand under us. Scans full commit history.
+        run: gitleaks git . --redact --no-banner
