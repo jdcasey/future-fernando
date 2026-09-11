@@ -1,5 +1,6 @@
 # Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
+# shellcheck shell=bash
 #
 # fg-common.sh — shared paths, defaults, and config loading.
 # Source this FIRST from any focusguard script. Not executable on its own.
@@ -53,7 +54,8 @@ FG_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard/focusguard.conf"
 : "${FG_OLLAMA_KEEP_ALIVE:=5m}"
 
 # Sentinel embedded in distiller prompts so capture never re-captures its own
-# LLM calls (which would otherwise loop).
+# LLM calls (which would otherwise loop). Used by fg-capture.sh / focusguard-tick.
+# shellcheck disable=SC2034  # consumed in other sourced files, not this one
 FG_SENTINEL="FOCUSGUARD_CAPTURE_DISTILL_V1"
 
 # ---- config file overrides defaults -----------------------------------------

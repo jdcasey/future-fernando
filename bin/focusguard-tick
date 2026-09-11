@@ -29,7 +29,11 @@ done
 [ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
   echo "focusguard-tick: cannot find libs (set FG_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"; . "$FG_LIB/fg-capture.sh"
+. "$FG_LIB/fg-common.sh"
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-llm.sh"
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-capture.sh"
 
 # ---- single-instance lock ---------------------------------------------------
 exec 9>"$FG_STATE_DIR/.lock"

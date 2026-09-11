@@ -29,7 +29,11 @@ if [ -z "${FG_LIB:-}" ] || [ ! -f "$FG_LIB/fg-common.sh" ]; then
   echo "focusguard-capture: cannot find focusguard libs (set FG_LIB)" >&2; exit 1
 fi
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"; . "$FG_LIB/fg-capture.sh"
+. "$FG_LIB/fg-common.sh"
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-llm.sh"
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-capture.sh"
 
 usage() {
   cat <<EOF

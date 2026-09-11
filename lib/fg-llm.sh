@@ -1,5 +1,6 @@
 # Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
+# shellcheck shell=bash
 #
 # fg-llm.sh — pluggable LLM gateway. This is the reusable seam: any focusguard
 # support that needs a completion calls fg_llm_complete and gets the same

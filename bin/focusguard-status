@@ -26,7 +26,9 @@ done
 [ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
   echo "focusguard-status: cannot find libs (set FG_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"
+. "$FG_LIB/fg-common.sh"
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-llm.sh"
 
 now=$(date +%s)
 maxm=$(fg_last_human_activity)

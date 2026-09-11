@@ -1,5 +1,7 @@
 # focusguard
 
+[![security](https://github.com/jdcasey/focusguard/actions/workflows/security.yml/badge.svg)](https://github.com/jdcasey/focusguard/actions/workflows/security.yml)
+
 Two supports for long, hyperfocused sessions with [Claude Code](https://claude.com/claude-code),
 built for AuDHD / ADHD working styles — driven off a single signal so neither one is
 something you have to remember to do:

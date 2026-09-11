@@ -1,6 +1,7 @@
 # Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
 #
+# shellcheck shell=bash
 # fg-capture.sh — turn an idle session transcript into a QUESTION-*.md digest.
 # Depends on fg-common.sh and fg-llm.sh being sourced first.
 #

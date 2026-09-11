@@ -1,0 +1,52 @@
+name: security
+
+# Lightweight security scan for a pure-bash project:
+#   - ShellCheck  : static analysis of every shell script (catches the
+#                   unquoted-var / word-splitting class of bugs).
+#   - gitleaks    : secret scan across the full commit history.
+# (CodeQL is intentionally omitted — it has no shell/bash support.)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: these jobs only read the repo.
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: ShellCheck (static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck version
+        run: shellcheck --version   # pre-installed on the runner image
+      - name: Lint shell scripts
+        run: shellcheck -x bin/* install.sh uninstall.sh lib/*.sh
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    env:
+      # Pinned + checksum-verified for reproducibility and supply-chain safety.
+      # To bump: set the new version, download the linux_x64 tarball, and update
+      # the sha256 to match that artifact.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the scan covers every commit
+      - name: Install gitleaks (pinned, verified)
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSL "$url" -o gitleaks.tgz
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+      - name: Scan history for secrets
+        run: gitleaks detect --source . --redact --no-banner
