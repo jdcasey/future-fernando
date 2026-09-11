@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Copyright 2026 Focusguard contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# focusguard-status — human-readable snapshot of the current focus/break state.
+
+set -uo pipefail
+
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FG_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+done
+[ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
+  echo "focusguard-status: cannot find libs (set FG_LIB)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"
+
+now=$(date +%s)
+maxm=$(fg_last_human_activity)
+[ -z "$maxm" ] && maxm=0
+gap=$(( now - maxm ))
+
+fmt() { printf '%dm %ds' $(( $1 / 60 )) $(( $1 % 60 )); }
+
+echo "focusguard status  (as of $(date '+%Y-%m-%d %H:%M:%S'))"
+if [ "$maxm" -eq 0 ]; then
+  echo "  last activity : no typed prompt today (idle)"
+else
+  echo "  last activity : $(fmt "$gap") ago (your last typed prompt)"
+fi
+
+grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
+  echo "  state         : on a break / idle (clock reset)"
+elif [ "$now" -lt "$grace_until" ]; then
+  left=$(( grace_until - now ))
+  echo "  state         : break-start grace — quiet for $(fmt "$left") (step away to credit it)"
+else
+  start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || echo "$maxm")
+  active=$(( now - start ))
+  if [ "$active" -ge "$FG_BREAK_INTERVAL" ]; then
+    over=$(( active - FG_BREAK_INTERVAL ))
+    lvl=$(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0)
+    echo "  state         : BREAK OVERDUE by $(fmt "$over") (nag level $lvl)"
+    echo "  -> run 'break-start' when you step away"
+  else
+    left=$(( FG_BREAK_INTERVAL - active ))
+    echo "  state         : active $(fmt "$active"); next reminder in ~$(fmt "$left")"
+  fi
+fi
+
+ncap=$(find "$FG_STATE_DIR/captured" -type f 2>/dev/null | wc -l | tr -d ' ')
+echo "  sessions seen : $ncap tracked for capture"
+echo "  capture llm   : $(fg_llm_describe)"

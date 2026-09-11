@@ -1,0 +1,17 @@
+# Copyright 2026 Focusguard contributors
+# Licensed under the Apache License, Version 2.0. See LICENSE.
+#
+# Fire focusguard-tick every ~2 minutes while you're logged in.
+
+[Unit]
+Description=Run focusguard every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+# We only care about "now", not catching up on missed runs after suspend.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

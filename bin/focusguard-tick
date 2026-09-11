@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# Copyright 2026 Focusguard contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# focusguard-tick — one scan pass, run every ~2 min by a systemd user timer.
+#   Job A  answer capture (see lib/fg-capture.sh)
+#   Job B  break guard (below)
+
+set -uo pipefail
+
+# ---- load libs --------------------------------------------------------------
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FG_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+done
+[ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
+  echo "focusguard-tick: cannot find libs (set FG_LIB)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"; . "$FG_LIB/fg-capture.sh"
+
+# ---- single-instance lock ---------------------------------------------------
+exec 9>"$FG_STATE_DIR/.lock"
+flock -n 9 || exit 0
+
+now=$(date +%s)
+
+# Break-guard clock = last HUMAN-typed prompt, not file mtime, so autonomous
+# agent activity doesn't count as engagement. 0 if you haven't typed today.
+last_human=$(fg_last_human_activity)
+[ -z "$last_human" ] && last_human=0
+gap=$(( now - last_human ))
+
+# =============================================================================
+# Job B — break guard
+# =============================================================================
+close_notification() {
+  local id
+  id=$(cat "$FG_STATE_DIR/notif_id" 2>/dev/null || true)
+  if [ -n "${id:-}" ] && [ "$id" != 0 ]; then
+    gdbus call --session --dest org.freedesktop.Notifications \
+      --object-path /org/freedesktop/Notifications \
+      --method org.freedesktop.Notifications.CloseNotification "$id" \
+      >/dev/null 2>&1 || true
+  fi
+  rm -f "$FG_STATE_DIR/notif_id"
+}
+
+fire_nag() {
+  local level="$1" active="$2"
+  local mins=$(( active / 60 )) over=$(( (active - FG_BREAK_INTERVAL) / 60 ))
+  local title body
+  title="Take a break (nag #$level)"
+  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: break-start"
+
+  local args=(-u critical -a focusguard -t 0)
+  if [ "$FG_NOTIFY_STACK" != 1 ]; then
+    local id
+    id=$(cat "$FG_STATE_DIR/notif_id" 2>/dev/null || true)
+    [ -n "${id:-}" ] && [ "$id" != 0 ] && args+=(-r "$id")
+  fi
+  local newid
+  newid=$(notify-send "${args[@]}" -p "$title" "$body" 2>/dev/null || true)
+  [ -n "$newid" ] && printf '%s\n' "$newid" > "$FG_STATE_DIR/notif_id"
+
+  if [ "$FG_SOUND_ENABLED" = 1 ]; then
+    local sounds=(dialog-information dialog-warning dialog-warning dialog-error bell)
+    local idx=$(( level - 1 ))
+    [ "$idx" -ge "${#sounds[@]}" ] && idx=$(( ${#sounds[@]} - 1 ))
+    local reps=$(( level < 5 ? level : 5 )) i
+    for (( i = 0; i < reps; i++ )); do
+      canberra-gtk-play -i "${sounds[$idx]}" >/dev/null 2>&1 || true
+    done
+  fi
+}
+
+if [ "$FG_BREAK_ENABLED" = 1 ]; then
+  grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+
+  if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
+    # Real quiet gap: the break is credited. This is the ONLY thing that resets
+    # the clock — whether you walked away on your own or after `break-start`.
+    rm -f "$FG_STATE_DIR/stretch_start" "$FG_STATE_DIR/nag_level" \
+          "$FG_STATE_DIR/break_pending" "$FG_STATE_DIR/grace_until"
+    close_notification
+  elif [ "$now" -lt "$grace_until" ]; then
+    # `break-start` grace window: stay quiet, but don't credit the break or
+    # reset the stretch clock — you haven't actually stepped away yet.
+    close_notification
+  else
+    rm -f "$FG_STATE_DIR/grace_until"   # grace expired without a real break
+    start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || true)
+    if [ -z "${start:-}" ]; then start="$last_human"; printf '%s\n' "$start" > "$FG_STATE_DIR/stretch_start"; fi
+    active=$(( now - start ))
+    if [ "$active" -ge "$FG_BREAK_INTERVAL" ]; then
+      touch "$FG_STATE_DIR/break_pending"
+      level=$(( $(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0) + 1 ))
+      printf '%s\n' "$level" > "$FG_STATE_DIR/nag_level"
+      fire_nag "$level" "$active"
+    fi
+  fi
+fi
+
+# =============================================================================
+# Job A — answer capture (walked-away sessions)
+# =============================================================================
+if [ "$FG_CAPTURE_ENABLED" = 1 ]; then
+  count=0
+  while read -r m file; do
+    [ "$count" -ge "$FG_CAPTURE_PER_TICK" ] && break
+    m=${m%.*}
+    sgap=$(( now - m ))
+    [ "$sgap" -lt "$FG_CAPTURE_IDLE" ] && continue     # still active
+    [ "$sgap" -gt "$FG_CAPTURE_MAX_AGE" ] && continue  # too stale
+    grep -ql "$FG_SENTINEL" "$file" 2>/dev/null && continue  # our own capture call
+
+    sid=$(basename "$file" .jsonl)
+    marker="$FG_STATE_DIR/captured/$sid"
+    last=$(cat "$marker" 2>/dev/null || echo 0)
+    [ "$m" -le "$last" ] && continue                   # already captured this content
+
+    fg_capture_session "$file"; rc=$?
+    if [ "$rc" -ne 1 ]; then                           # 0 wrote / 2 skip -> mark done
+      printf '%s\n' "$m" > "$marker"
+      [ "$rc" -eq 0 ] && count=$(( count + 1 ))
+    fi                                                 # rc==1 error -> retry next tick
+  done < <(find "$FG_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
+             -printf '%T@ %p\n' 2>/dev/null | sort -rn)
+fi
+
+exit 0

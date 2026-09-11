@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Copyright 2026 Focusguard contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# focusguard-capture — run capture on a single transcript, on demand.
+# Handy for trying/tuning backends without waiting for the timer.
+
+set -uo pipefail
+
+# ---- locate and load libs ---------------------------------------------------
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FG_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+done
+if [ -z "${FG_LIB:-}" ] || [ ! -f "$FG_LIB/fg-common.sh" ]; then
+  echo "focusguard-capture: cannot find focusguard libs (set FG_LIB)" >&2; exit 1
+fi
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-common.sh"; . "$FG_LIB/fg-llm.sh"; . "$FG_LIB/fg-capture.sh"
+
+usage() {
+  cat <<EOF
+Usage: focusguard-capture [options] <transcript.jsonl | session-uuid | --latest>
+
+  --dry-run          Print the distilled result; do NOT write a file.
+  --compare          Run BOTH claude and ollama on the tail and print side by
+                     side with timings (implies --dry-run).
+  --backend NAME     Override backend for this run (claude | ollama).
+  --model NAME       Override model for this run.
+  --latest           Use the most recently modified session transcript.
+  -h, --help         This help.
+
+Examples:
+  focusguard-capture --dry-run --latest
+  focusguard-capture --compare --latest
+  focusguard-capture --dry-run --backend ollama --model llama3.2:3b <uuid>
+EOF
+}
+
+DRY=0; COMPARE=0; TARGET=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY=1 ;;
+    --compare) COMPARE=1; DRY=1 ;;
+    --backend) FG_LLM_BACKEND="$2"; shift ;;
+    --model)   FG_LLM_MODEL="$2"; shift ;;
+    --latest)  TARGET="--latest" ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "unknown option: $1" >&2; usage; exit 2 ;;
+    *) TARGET="$1" ;;
+  esac
+  shift
+done
+
+[ -z "$TARGET" ] && { usage; exit 2; }
+
+# ---- resolve the transcript path --------------------------------------------
+resolve_transcript() {
+  local t="$1"
+  if [ "$t" = "--latest" ]; then
+    find "$FG_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
+      -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
+    return
+  fi
+  if [ -f "$t" ]; then printf '%s\n' "$t"; return; fi
+  # treat as a session uuid (with or without .jsonl)
+  local hit
+  hit=$(find "$FG_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name "${t%.jsonl}.jsonl" 2>/dev/null | head -1)
+  printf '%s\n' "$hit"
+}
+
+FILE="$(resolve_transcript "$TARGET")"
+if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+  echo "focusguard-capture: transcript not found for '$TARGET'" >&2; exit 1
+fi
+echo "transcript: $FILE"
+echo "cwd:        $(fg_transcript_cwd "$FILE")"
+
+run_one() {  # backend model -> prints rendered markdown or SKIP/ERROR, with timing
+  local backend="$1" model="$2" start end json rc md
+  FG_LLM_BACKEND="$backend"; FG_LLM_MODEL="$model"
+  echo "===== $(fg_llm_describe) ====="
+  if ! fg_llm_check; then echo "(backend unavailable — skipped)"; echo; return; fi
+  start=$(date +%s)
+  json=$(fg_distill "$FILE"); rc=$?
+  end=$(date +%s)
+  if [ "$rc" -eq 2 ]; then echo "(tail too short to distill)"; echo; return; fi
+  if [ "$rc" -ne 0 ]; then echo "(ERROR: distill failed)"; echo; return; fi
+  md=$(fg_render_markdown "$json"); rc=$?
+  if [ "$rc" -eq 2 ]; then echo "(model chose SKIP — nothing worth saving)";
+  else echo "slug: $(fg_slug "$json")"; echo; printf '%s\n' "$md"; fi
+  echo; echo "[took $(( end - start ))s]"; echo
+}
+
+echo
+if [ "$COMPARE" = 1 ]; then
+  run_one claude "${FG_CLAUDE_MODEL}"
+  run_one ollama "${FG_OLLAMA_MODEL}"
+elif [ "$DRY" = 1 ]; then
+  run_one "$FG_LLM_BACKEND" "${FG_LLM_MODEL:-}"
+else
+  if fg_capture_session "$FILE"; then echo "wrote a QUESTION file under the project's capture dir";
+  else echo "nothing written (skip or error)"; fi
+fi
