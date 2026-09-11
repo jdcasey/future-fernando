@@ -20,10 +20,24 @@ jobs:
   shellcheck:
     name: ShellCheck (static analysis)
     runs-on: ubuntu-latest
+    env:
+      # Pinned + checksum-verified so CI matches local exactly. The runner's
+      # bundled ShellCheck version drifts and toggles info-level checks (e.g.
+      # SC2015), which otherwise makes "clean locally" fail in CI.
+      # To bump: set the version, download the linux.x86_64.tar.xz, update sha256.
+      SHELLCHECK_VERSION: 0.11.0
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
     steps:
       - uses: actions/checkout@v4
-      - name: shellcheck version
-        run: shellcheck --version   # pre-installed on the runner image
+      - name: Install ShellCheck (pinned, verified)
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -sSL "$url" -o shellcheck.tar.xz
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xf shellcheck.tar.xz
+          sudo install "shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
       - name: Lint shell scripts
         run: shellcheck -x bin/* install.sh uninstall.sh lib/*.sh
 
