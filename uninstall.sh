@@ -30,7 +30,8 @@ systemctl --user disable --now focusguard.timer 2>/dev/null || true
 echo "==> Removing units, scripts, and libs"
 rm -f "$UNIT_DIR/focusguard.timer" "$UNIT_DIR/focusguard.service"
 rm -f "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
-      "$BIN_DIR/break-start" "$BIN_DIR/break-done" "$BIN_DIR/focusguard-status"
+      "$BIN_DIR/afk" "$BIN_DIR/break-start" "$BIN_DIR/break-done" \
+      "$BIN_DIR/focusguard-status"
 rm -rf "$LIB_DIR"
 systemctl --user daemon-reload
 

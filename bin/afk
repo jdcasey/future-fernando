@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# break-start — tell focusguard you're stepping away NOW. Silences the current
+# afk — tell focusguard you're stepping away NOW. Silences the current
 # nag immediately and opens a short grace window. The break is only *credited*
 # (and the 60-min clock reset) once a real >=FG_ACTIVITY_GAP quiet gap actually
 # happens. Keep typing through the grace and the nag comes back — you can't
@@ -28,7 +28,7 @@ for _d in "${FG_LIB:-}" \
   if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
 done
 [ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
-  echo "break-start: cannot find libs (set FG_LIB)" >&2; exit 1; }
+  echo "afk: cannot find libs (set FG_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$FG_LIB/fg-common.sh"
 

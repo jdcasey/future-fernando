@@ -67,7 +67,7 @@ fire_nag() {
   local mins=$(( active / 60 )) over=$(( (active - FG_BREAK_INTERVAL) / 60 ))
   local title body
   title="Take a break (nag #$level)"
-  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: break-start"
+  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: afk"
 
   local args=(-u critical -a focusguard -t 0)
   if [ "$FG_NOTIFY_STACK" != 1 ]; then
@@ -95,12 +95,12 @@ if [ "$FG_BREAK_ENABLED" = 1 ]; then
 
   if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
     # Real quiet gap: the break is credited. This is the ONLY thing that resets
-    # the clock — whether you walked away on your own or after `break-start`.
+    # the clock — whether you walked away on your own or after `afk`.
     rm -f "$FG_STATE_DIR/stretch_start" "$FG_STATE_DIR/nag_level" \
           "$FG_STATE_DIR/break_pending" "$FG_STATE_DIR/grace_until"
     close_notification
   elif [ "$now" -lt "$grace_until" ]; then
-    # `break-start` grace window: stay quiet, but don't credit the break or
+    # `afk` grace window: stay quiet, but don't credit the break or
     # reset the stretch clock — you haven't actually stepped away yet.
     close_notification
   else

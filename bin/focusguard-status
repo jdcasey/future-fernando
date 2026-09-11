@@ -49,7 +49,7 @@ if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
   echo "  state         : on a break / idle (clock reset)"
 elif [ "$now" -lt "$grace_until" ]; then
   left=$(( grace_until - now ))
-  echo "  state         : break-start grace — quiet for $(fmt "$left") (step away to credit it)"
+  echo "  state         : afk grace — quiet for $(fmt "$left") (step away to credit it)"
 else
   start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || echo "$maxm")
   active=$(( now - start ))
@@ -57,7 +57,7 @@ else
     over=$(( active - FG_BREAK_INTERVAL ))
     lvl=$(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0)
     echo "  state         : BREAK OVERDUE by $(fmt "$over") (nag level $lvl)"
-    echo "  -> run 'break-start' when you step away"
+    echo "  -> run 'afk' when you step away"
   else
     left=$(( FG_BREAK_INTERVAL - active ))
     echo "  state         : active $(fmt "$active"); next reminder in ~$(fmt "$left")"

@@ -52,7 +52,7 @@ echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
 install -m 0755 "$here/bin/focusguard-tick"    "$BIN_DIR/focusguard-tick"
 install -m 0755 "$here/bin/focusguard-capture" "$BIN_DIR/focusguard-capture"
-install -m 0755 "$here/bin/break-start"         "$BIN_DIR/break-start"
+install -m 0755 "$here/bin/afk"                "$BIN_DIR/afk"
 install -m 0755 "$here/bin/focusguard-status"   "$BIN_DIR/focusguard-status"
 
 echo "==> Installing systemd user units to $UNIT_DIR"
@@ -96,7 +96,7 @@ echo
 echo "Installed. Timer status:"
 systemctl --user --no-pager status focusguard.timer | sed -n '1,4p' || true
 echo
-echo "Make sure $BIN_DIR is on your PATH so 'break-start' works everywhere."
+echo "Make sure $BIN_DIR is on your PATH so 'afk' works everywhere."
 echo "Check state any time with:  focusguard-status"
 echo "Test a scan now with:       systemctl --user start focusguard.service"
 echo "Try/compare capture with:   focusguard-capture --compare --latest"

@@ -9,7 +9,7 @@ something you have to remember to do:
 1. **Persistent break guard.** After ~60 minutes of *continuous* activity it starts an
    escalating, sticky desktop reminder to take a break. It is deliberately hard to
    ignore, and it can't be silenced without actually stepping away: a real ≥10-minute
-   quiet gap credits the break and resets the clock on its own. Running `break-start`
+   quiet gap credits the break and resets the clock on its own. Running `afk`
    hushes the nag immediately, but only buys a short grace window — if you keep working
    through it instead of leaving, the nag comes back.
 2. **Automatic answer capture.** When a session goes idle because you walked away or got
@@ -45,7 +45,7 @@ polling loop, no root.
   repeats, updated banner text.
 - A genuine ≥`FG_ACTIVITY_GAP` quiet gap (you actually stepped away, or the computer
   suspended/slept) is the only thing that *credits* the break and resets the clock.
-- `break-start` hushes the nag now and opens a `FG_BREAK_GRACE` (5 min) grace window so
+- `afk` hushes the nag now and opens a `FG_BREAK_GRACE` (5 min) grace window so
   you can leave without the banner blaring — but it does **not** reset the clock. If no
   real quiet gap follows, the nag returns when grace expires. Clicking/dismissing the
   banner does nothing by design (a glance-and-swat is exactly the failure this guards
@@ -139,13 +139,13 @@ It installs the scripts to `~/.local/bin`, the units to `~/.config/systemd/user`
 config to `~/.config/focusguard/focusguard.conf`, seeds a capture baseline (so your existing
 sessions are **not** back-captured), and enables the timer.
 
-Make sure `~/.local/bin` is on your `PATH` so `break-start` works from any terminal.
+Make sure `~/.local/bin` is on your `PATH` so `afk` works from any terminal.
 
 ## Usage
 
 ```sh
 focusguard-status                         # where am I in the current stretch?
-break-start                               # I'm stepping away — hush the nag now
+afk                                       # I'm stepping away — hush the nag now
 focusguard-capture --compare --latest     # try capture backends on a real session
 systemctl --user start focusguard.service # run one scan right now
 journalctl --user -u focusguard.service   # logs

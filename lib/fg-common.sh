@@ -23,7 +23,7 @@ FG_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard/focusguard.conf"
 # break guard (seconds)
 : "${FG_BREAK_INTERVAL:=3600}"
 : "${FG_ACTIVITY_GAP:=600}"
-# grace window after `break-start`: the nag goes quiet, but the break is only
+# grace window after `afk`: the nag goes quiet, but the break is only
 # *credited* (clock reset) by a real >=FG_ACTIVITY_GAP quiet gap. Keep working
 # through the grace and the nag returns — silence requires actually stepping away.
 : "${FG_BREAK_GRACE:=300}"

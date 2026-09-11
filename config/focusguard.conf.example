@@ -12,7 +12,7 @@
 # --- Break guard timing (seconds) --------------------------------------------
 # FG_BREAK_INTERVAL=3600    # continuous active time before a break is due (60m)
 # FG_ACTIVITY_GAP=600       # quiet time that counts as a break / resets clock (10m)
-# FG_BREAK_GRACE=300        # after 'break-start': quiet window before the nag returns
+# FG_BREAK_GRACE=300        # after 'afk': quiet window before the nag returns
                             # if you didn't actually step away (5m)
 
 # --- Break guard delivery ----------------------------------------------------
