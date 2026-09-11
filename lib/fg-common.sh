@@ -1,4 +1,4 @@
-# Copyright 2026 Focusguard contributors
+# Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # fg-common.sh — shared paths, defaults, and config loading.

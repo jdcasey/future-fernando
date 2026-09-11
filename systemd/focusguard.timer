@@ -1,4 +1,4 @@
-# Copyright 2026 Focusguard contributors
+# Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # Fire focusguard-tick every ~2 minutes while you're logged in.

@@ -1,4 +1,4 @@
-# Copyright 2026 Focusguard contributors
+# Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
 #
 # fg-llm.sh — pluggable LLM gateway. This is the reusable seam: any focusguard
