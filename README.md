@@ -17,6 +17,30 @@ something you have to remember to do:
    `QUESTION-*.md` file in that project — so you can find "what did I ask and what was the
    answer?" later without re-reading a transcript. No manual step; nothing to trigger.
 
+## The daily loop
+
+The point is that there is almost nothing to do. After a one-time `./install.sh`, a
+background timer does the watching; you just work.
+
+1. **Work normally** in Claude Code. Nothing to start, arm, or check in.
+2. **When the break nag fires** (~60 min of continuous typing), you have two honest
+   options — both reset the clock:
+   - Just walk away. A real ≥10-min quiet gap credits the break on its own.
+   - Run `afk` first if the banner is blaring and you want it to hush while you get up,
+     *then* actually leave. `afk` only buys a short grace window; it does **not** count
+     as a break, so keeping working through it brings the nag back. (You never *have* to
+     run `afk` — walking away is enough.)
+3. **When you get pulled away mid-thread**, do nothing. focusguard notices the session
+   went idle and writes a `QUESTION-*.md` into that project's `.temp/`. Come back later
+   and read it to recover "what did I ask, what was the answer?" without re-reading the
+   transcript.
+4. **Check in any time** with `focusguard-status` to see where you are in the current
+   stretch and how long until the next reminder.
+
+That's the whole loop: work → get nudged to break → step away → find your captured
+answers waiting. The rest of this README is detail on how each piece works and how to
+tune it.
+
 ## How it works
 
 Claude Code writes a transcript (`~/.claude/projects/<slug>/<uuid>.jsonl`) for every
