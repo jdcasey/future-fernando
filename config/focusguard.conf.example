@@ -11,9 +11,20 @@
 
 # --- Break guard timing (seconds) --------------------------------------------
 # FG_BREAK_INTERVAL=3600    # continuous active time before a break is due (60m)
-# FG_ACTIVITY_GAP=600       # quiet time that counts as a break / resets clock (10m)
+# FG_ACTIVITY_GAP=600       # absence that counts as a break / resets clock (10m)
 # FG_BREAK_GRACE=300        # after 'afk': quiet window before the nag returns
                             # if you didn't actually step away (5m)
+
+# --- Break guard presence signal ---------------------------------------------
+# What counts as "still working" for the break clock:
+#   auto  = desktop idle time (GNOME/Mutter via gdbus) if available, else the
+#           legacy typed-prompt signal. Recommended.
+#   idle  = desktop idle only — watching an agent or reading a diff counts as
+#           work; only leaving the keyboard >=FG_ACTIVITY_GAP credits a break.
+#           Requires GNOME/Wayland (or X) + gdbus.
+#   typed = legacy: clock driven by your last typed Claude prompt, so long
+#           autonomous agent runs look like you stepped away.
+# FG_PRESENCE=auto
 
 # --- Break guard delivery ----------------------------------------------------
 # FG_NOTIFY_STACK=0         # 0=one sticky banner that updates; 1=stack a new one each nag

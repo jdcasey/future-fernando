@@ -3,13 +3,13 @@
 [![security](https://github.com/jdcasey/focusguard/actions/workflows/security.yml/badge.svg)](https://github.com/jdcasey/focusguard/actions/workflows/security.yml)
 
 Two supports for long, hyperfocused sessions with [Claude Code](https://claude.com/claude-code),
-built for AuDHD / ADHD working styles — driven off a single signal so neither one is
+built for AuDHD / ADHD working styles — both fully automatic, so neither one is
 something you have to remember to do:
 
-1. **Persistent break guard.** After ~60 minutes of *continuous* activity it starts an
-   escalating, sticky desktop reminder to take a break. It is deliberately hard to
-   ignore, and it can't be silenced without actually stepping away: a real ≥10-minute
-   quiet gap credits the break and resets the clock on its own. Running `afk`
+1. **Persistent break guard.** After ~60 minutes of *continuous* work at the keyboard it
+   starts an escalating, sticky desktop reminder to take a break. It is deliberately hard
+   to ignore, and it can't be silenced without actually stepping away: a real ≥10-minute
+   absence from the keyboard credits the break and resets the clock on its own. Running `afk`
    hushes the nag immediately, but only buys a short grace window — if you keep working
    through it instead of leaving, the nag comes back.
 2. **Automatic answer capture.** When a session goes idle because you walked away or got
@@ -43,32 +43,50 @@ tune it.
 
 ## How it works
 
-Claude Code writes a transcript (`~/.claude/projects/<slug>/<uuid>.jsonl`) for every
-session, bumps the file's mtime on every interaction, and tags genuinely human-typed
-prompts (`promptSource == "typed"`). focusguard reads both, using the right signal for
-each job:
+The two jobs read different signals, each chosen to answer a different question:
 
-- **Break guard — your last human-typed prompt.** File mtime bumps on *any* activity,
-  including a background agent working autonomously while you're away — which would make
-  a real break look like engagement and nag you anyway. So the guard instead reads the
-  timestamp of your last *typed* prompt. It's a cheap two-stage scan: mtime-sort today's
-  transcripts, take the `FG_HUMAN_SCAN_N` most recent, and read the last typed-prompt
-  time from just those.
-- **Capture — a single session going stale.** When one session's own mtime has been idle
-  for a few minutes, you left it mid-thread; that triggers capture for that session.
+- **Break guard — desktop presence.** The question is "are you *at the keyboard*?", not
+  "are you typing to Claude?". Long autonomous agent runs and reading a diff are real work
+  but generate few keystrokes, so a typed-prompt signal would mistake them for a break and
+  never nag; conversely a background agent bumping a transcript's mtime while you're away
+  would look like engagement. So the guard reads **desktop idle time** — seconds since your
+  last real keyboard/mouse input — from GNOME/Mutter's `IdleMonitor` over the session bus
+  (`FG_PRESENCE=auto`, falling back to the legacy typed-prompt signal where no idle monitor
+  is available). Watching an agent counts as work; only leaving the keyboard credits a break.
+- **Capture — a single session going stale.** Claude Code writes a transcript
+  (`~/.claude/projects/<slug>/<uuid>.jsonl`) per session and bumps its mtime on every
+  interaction. When one session's own mtime has been idle for a few minutes, you left it
+  mid-thread; that triggers capture for that session.
 
 A `systemd` user timer runs one scan (`focusguard-tick`) every ~2 minutes. No daemon, no
 polling loop, no root.
 
+### Why presence, not typed prompts (GNOME only, for now)
+
+Earlier versions clocked the break guard off your last *typed Claude prompt*. That breaks
+down for agent-heavy work: fire off a patch review, watch the agent grind and read diffs
+for 15–25 minutes, type the next prompt — and every one of those think-gaps looks
+identical to walking away, so the guard keeps crediting phantom breaks and never nags. You
+can work relentlessly all day and never accumulate a continuous hour.
+
+The fix is to clock off **desktop presence** — seconds since real keyboard/mouse input,
+read from GNOME/Mutter's `IdleMonitor` over the session bus. Watching an agent counts as
+work; only actually leaving the keyboard credits a break. This currently requires
+**GNOME** (Wayland or X); on any other desktop `FG_PRESENCE=auto` falls back to the legacy
+typed-prompt signal. A portable presence backend for other desktops is tracked in
+[`TODO.md`](TODO.md).
+
 ### Break guard details
 
-- Continuous activity is measured from your typed prompts, ignoring gaps shorter than
-  `FG_ACTIVITY_GAP` (10 min).
+- Continuous activity is measured from desktop presence (last keyboard/mouse input),
+  ignoring absences shorter than `FG_ACTIVITY_GAP` (10 min). Set `FG_PRESENCE=typed` to
+  fall back to the legacy typed-prompt signal, or `idle` to force desktop-idle only.
 - At `FG_BREAK_INTERVAL` (60 min) it fires a `critical`-urgency notification (sticky on
   GNOME) plus a sound, and **escalates** each unacknowledged re-fire — harsher sound, more
   repeats, updated banner text.
-- A genuine ≥`FG_ACTIVITY_GAP` quiet gap (you actually stepped away, or the computer
-  suspended/slept) is the only thing that *credits* the break and resets the clock.
+- A genuine ≥`FG_ACTIVITY_GAP` absence from the keyboard (you actually stepped away, or
+  the computer suspended/slept) is the only thing that *credits* the break and resets the
+  clock.
 - `afk` hushes the nag now and opens a `FG_BREAK_GRACE` (5 min) grace window so
   you can leave without the banner blaring — but it does **not** reset the clock. If no
   real quiet gap follows, the nag returns when grace expires. Clicking/dismissing the

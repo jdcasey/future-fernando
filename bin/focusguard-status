@@ -31,27 +31,28 @@ done
 . "$FG_LIB/fg-llm.sh"
 
 now=$(date +%s)
-maxm=$(fg_last_human_activity)
-[ -z "$maxm" ] && maxm=0
-gap=$(( now - maxm ))
+away=$(fg_break_away_seconds)
+
+# Which signal is actually in play, for the status line.
+if [ "$FG_PRESENCE" != typed ] && fg_idle_seconds >/dev/null 2>&1; then
+  src="desktop idle"
+else
+  src="typed prompt (FG_PRESENCE=$FG_PRESENCE)"
+fi
 
 fmt() { printf '%dm %ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
 echo "focusguard status  (as of $(date '+%Y-%m-%d %H:%M:%S'))"
-if [ "$maxm" -eq 0 ]; then
-  echo "  last activity : no typed prompt today (idle)"
-else
-  echo "  last activity : $(fmt "$gap") ago (your last typed prompt)"
-fi
+echo "  presence      : $(fmt "$away") since last activity ($src)"
 
 grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
-if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
+if [ "$away" -ge "$FG_ACTIVITY_GAP" ]; then
   echo "  state         : on a break / idle (clock reset)"
 elif [ "$now" -lt "$grace_until" ]; then
   left=$(( grace_until - now ))
   echo "  state         : afk grace — quiet for $(fmt "$left") (step away to credit it)"
 else
-  start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || echo "$maxm")
+  start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || echo "$now")
   active=$(( now - start ))
   if [ "$active" -ge "$FG_BREAK_INTERVAL" ]; then
     over=$(( active - FG_BREAK_INTERVAL ))

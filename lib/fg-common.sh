@@ -27,8 +27,14 @@ FG_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard/focusguard.conf"
 # *credited* (clock reset) by a real >=FG_ACTIVITY_GAP quiet gap. Keep working
 # through the grace and the nag returns — silence requires actually stepping away.
 : "${FG_BREAK_GRACE:=300}"
+# Presence signal for the break-guard clock: auto | idle | typed.
+#   idle  = seconds since real desktop input (GNOME/Mutter) — watching an agent
+#           counts as work; only leaving the keyboard credits a break.
+#   typed = legacy: seconds since your last typed Claude prompt.
+#   auto  = idle if the desktop idle monitor answers, else fall back to typed.
+: "${FG_PRESENCE:=auto}"
 # how many of today's most-recently-active sessions to inspect for a real
-# human-typed prompt when computing the break-guard activity clock.
+# human-typed prompt when computing the break-guard clock (typed/auto-fallback).
 : "${FG_HUMAN_SCAN_N:=5}"
 
 # break delivery
@@ -91,6 +97,37 @@ fg_last_human_activity() {
              | grep -v "/$work_slug/" \
              | sort -rn | head -n "$FG_HUMAN_SCAN_N" | cut -d' ' -f2-)
   printf '%s\n' "$best"
+}
+
+# Seconds since the last real desktop input (keyboard/mouse), via GNOME/Mutter's
+# IdleMonitor on the session bus. This is a PRESENCE signal: it stays low while
+# you read a diff or watch an agent run, and only climbs once you actually leave
+# the keyboard. Prints the idle seconds, or nothing (returns 1) when the monitor
+# is unavailable (non-GNOME, no session bus, headless) so callers can fall back.
+fg_idle_seconds() {
+  local out ms
+  out=$(gdbus call --session \
+          --dest org.gnome.Mutter.IdleMonitor \
+          --object-path /org/gnome/Mutter/IdleMonitor/Core \
+          --method org.gnome.Mutter.IdleMonitor.GetIdletime 2>/dev/null) || return 1
+  ms=${out##*uint64 }; ms=${ms%%[!0-9]*}     # (uint64 29144,) -> 29144
+  [ -n "$ms" ] || return 1
+  printf '%s\n' "$(( ms / 1000 ))"
+}
+
+# Seconds since you were last "present" for break-guard purposes. Presence beats
+# typing: watching an agent counts as work, and only real physical absence
+# credits a break. Honors FG_PRESENCE (idle | typed | auto). On idle-monitor
+# failure it degrades to "present" (0) rather than faking a break, so a broken
+# monitor errs toward nagging you, never toward silently suppressing reminders.
+fg_break_away_seconds() {
+  local idle last
+  if [ "$FG_PRESENCE" != typed ]; then
+    if idle=$(fg_idle_seconds); then printf '%s\n' "$idle"; return 0; fi
+    [ "$FG_PRESENCE" = idle ] && { printf '0\n'; return 0; }   # explicit idle: fail present
+  fi
+  last=$(fg_last_human_activity); [ -z "$last" ] && last=0     # typed, or auto fallback
+  printf '%s\n' "$(( $(date +%s) - last ))"
 }
 
 # Resolve the focusguard lib dir (used by bin scripts to find siblings).

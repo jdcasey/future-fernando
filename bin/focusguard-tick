@@ -41,11 +41,11 @@ flock -n 9 || exit 0
 
 now=$(date +%s)
 
-# Break-guard clock = last HUMAN-typed prompt, not file mtime, so autonomous
-# agent activity doesn't count as engagement. 0 if you haven't typed today.
-last_human=$(fg_last_human_activity)
-[ -z "$last_human" ] && last_human=0
-gap=$(( now - last_human ))
+# Break-guard clock is driven by DESKTOP PRESENCE, not typed prompts or file
+# mtimes: reading a diff or watching an agent run counts as work, and only real
+# physical absence (desktop idle) credits a break. `away` = seconds since you
+# were last present. See fg_break_away_seconds / FG_PRESENCE in fg-common.sh.
+away=$(fg_break_away_seconds)
 
 # =============================================================================
 # Job B — break guard
@@ -93,9 +93,9 @@ fire_nag() {
 if [ "$FG_BREAK_ENABLED" = 1 ]; then
   grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
 
-  if [ "$gap" -ge "$FG_ACTIVITY_GAP" ]; then
-    # Real quiet gap: the break is credited. This is the ONLY thing that resets
-    # the clock — whether you walked away on your own or after `afk`.
+  if [ "$away" -ge "$FG_ACTIVITY_GAP" ]; then
+    # Real absence: the break is credited. This is the ONLY thing that resets the
+    # clock — whether you walked away on your own or after `afk`.
     rm -f "$FG_STATE_DIR/stretch_start" "$FG_STATE_DIR/nag_level" \
           "$FG_STATE_DIR/break_pending" "$FG_STATE_DIR/grace_until"
     close_notification
@@ -106,7 +106,9 @@ if [ "$FG_BREAK_ENABLED" = 1 ]; then
   else
     rm -f "$FG_STATE_DIR/grace_until"   # grace expired without a real break
     start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || true)
-    if [ -z "${start:-}" ]; then start="$last_human"; printf '%s\n' "$start" > "$FG_STATE_DIR/stretch_start"; fi
+    # New stretch: seed from now (when you returned to the keyboard), not from an
+    # earlier prompt — presence-based accounting counts from when you got back.
+    if [ -z "${start:-}" ]; then start="$now"; printf '%s\n' "$start" > "$FG_STATE_DIR/stretch_start"; fi
     active=$(( now - start ))
     if [ "$active" -ge "$FG_BREAK_INTERVAL" ]; then
       touch "$FG_STATE_DIR/break_pending"
