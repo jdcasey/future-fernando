@@ -2,7 +2,7 @@
 
 *Fern* — an insistent but well-meaning assistant that manages your *future* stress.
 
-[![security](https://github.com/jdcasey/focusguard/actions/workflows/security.yml/badge.svg)](https://github.com/jdcasey/focusguard/actions/workflows/security.yml)
+[![security](https://github.com/jdcasey/future-fernando/actions/workflows/security.yml/badge.svg)](https://github.com/jdcasey/future-fernando/actions/workflows/security.yml)
 
 Supports for long, hyperfocused sessions with [Claude Code](https://claude.com/claude-code),
 built for AuDHD / ADHD working styles — all fully automatic, so none of them is

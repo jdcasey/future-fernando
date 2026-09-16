@@ -5,7 +5,7 @@
 
 [Unit]
 Description=Focusguard scan — break guard + session answer capture
-Documentation=https://github.com/jdcasey/focusguard
+Documentation=https://github.com/jdcasey/future-fernando
 After=graphical-session.target
 PartOf=graphical-session.target
 
