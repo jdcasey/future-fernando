@@ -13,35 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# fg-afk — tell focusguard you're stepping away NOW. Silences the current
+# fftf-afk — tell Fern you're stepping away NOW. Silences the current
 # nag immediately and opens a short grace window. The break is only *credited*
-# (and the 60-min clock reset) once a real >=FG_ACTIVITY_GAP quiet gap actually
+# (and the 60-min clock reset) once a real >=FFTF_ACTIVITY_GAP quiet gap actually
 # happens. Keep typing through the grace and the nag comes back — you can't
 # silence it without actually taking the break.
 
 set -uo pipefail
 
 _self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-for _d in "${FG_LIB:-}" \
-          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+for _d in "${FFTF_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib" \
           "$(dirname "$_self")/../lib"; do
-  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+  if [ -n "$_d" ] && [ -f "$_d/fftf-common.sh" ]; then FFTF_LIB="$_d"; break; fi
 done
-[ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
-  echo "fg-afk: cannot find libs (set FG_LIB)" >&2; exit 1; }
+[ -n "${FFTF_LIB:-}" ] && [ -f "$FFTF_LIB/fftf-common.sh" ] || {
+  echo "fftf-afk: cannot find libs (set FFTF_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-common.sh"
+. "$FFTF_LIB/fftf-common.sh"
 
 now=$(date +%s)
 
 # Open the grace window and stop the current escalation. Do NOT reset the
-# stretch clock here — only a real quiet gap (detected by fg-tick)
+# stretch clock here — only a real quiet gap (detected by fftf-tick)
 # credits the break, so this can't be used to cheat the guard.
-printf '%s\n' "$(( now + FG_BREAK_GRACE ))" > "$FG_STATE_DIR/grace_until"
-rm -f "$FG_STATE_DIR/nag_level" "$FG_STATE_DIR/break_pending"
+printf '%s\n' "$(( now + FFTF_BREAK_GRACE ))" > "$FFTF_STATE_DIR/grace_until"
+rm -f "$FFTF_STATE_DIR/nag_level" "$FFTF_STATE_DIR/break_pending"
 
 # Dismiss the on-screen banner if there is one.
-id=$(cat "$FG_STATE_DIR/notif_id" 2>/dev/null || true)
+id=$(cat "$FFTF_STATE_DIR/notif_id" 2>/dev/null || true)
 if [ -n "${id:-}" ] && [ "$id" != 0 ]; then
   gdbus call --session \
     --dest org.freedesktop.Notifications \
@@ -49,10 +49,10 @@ if [ -n "${id:-}" ] && [ "$id" != 0 ]; then
     --method org.freedesktop.Notifications.CloseNotification "$id" \
     >/dev/null 2>&1 || true
 fi
-rm -f "$FG_STATE_DIR/notif_id"
+rm -f "$FFTF_STATE_DIR/notif_id"
 
-grace_min=$(( FG_BREAK_GRACE / 60 ))
-gap_min=$(( FG_ACTIVITY_GAP / 60 ))
+grace_min=$(( FFTF_BREAK_GRACE / 60 ))
+gap_min=$(( FFTF_ACTIVITY_GAP / 60 ))
 echo "Stepping away — nag silenced. Actually take the break: a real ${gap_min}-min"
 echo "quiet gap credits it and resets the clock. Keep typing and the reminder"
 echo "returns in ~${grace_min} min."

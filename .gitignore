@@ -3,6 +3,6 @@
 *~
 .DS_Store
 
-# focusguard writes nothing into its own repo, but if you test it here,
+# Fern writes nothing into its own repo, but if you test it here,
 # keep any stray captured artifacts out of version control.
 .temp/

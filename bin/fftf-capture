@@ -13,31 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# fg-capture — run capture on a single transcript, on demand.
+# fftf-capture — run capture on a single transcript, on demand.
 # Handy for trying/tuning backends without waiting for the timer.
 
 set -uo pipefail
 
 # ---- locate and load libs ---------------------------------------------------
 _self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-for _d in "${FG_LIB:-}" \
-          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+for _d in "${FFTF_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib" \
           "$(dirname "$_self")/../lib"; do
-  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+  if [ -n "$_d" ] && [ -f "$_d/fftf-common.sh" ]; then FFTF_LIB="$_d"; break; fi
 done
-if [ -z "${FG_LIB:-}" ] || [ ! -f "$FG_LIB/fg-common.sh" ]; then
-  echo "fg-capture: cannot find focusguard libs (set FG_LIB)" >&2; exit 1
+if [ -z "${FFTF_LIB:-}" ] || [ ! -f "$FFTF_LIB/fftf-common.sh" ]; then
+  echo "fftf-capture: cannot find Fern libs (set FFTF_LIB)" >&2; exit 1
 fi
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-common.sh"
+. "$FFTF_LIB/fftf-common.sh"
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-llm.sh"
+. "$FFTF_LIB/fftf-llm.sh"
 # shellcheck source=/dev/null
-. "$FG_LIB/fg-capture.sh"
+. "$FFTF_LIB/fftf-capture.sh"
 
 usage() {
   cat <<EOF
-Usage: fg-capture [options] <transcript.jsonl | session-uuid | --latest>
+Usage: fftf-capture [options] <transcript.jsonl | session-uuid | --latest>
 
   --dry-run          Print the distilled result; do NOT write a file.
   --compare          Run BOTH claude and ollama on the tail and print side by
@@ -48,9 +48,9 @@ Usage: fg-capture [options] <transcript.jsonl | session-uuid | --latest>
   -h, --help         This help.
 
 Examples:
-  fg-capture --dry-run --latest
-  fg-capture --compare --latest
-  fg-capture --dry-run --backend ollama --model llama3.2:3b <uuid>
+  fftf-capture --dry-run --latest
+  fftf-capture --compare --latest
+  fftf-capture --dry-run --backend ollama --model llama3.2:3b <uuid>
 EOF
 }
 
@@ -59,8 +59,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --compare) COMPARE=1; DRY=1 ;;
-    --backend) FG_LLM_BACKEND="$2"; shift ;;
-    --model)   FG_LLM_MODEL="$2"; shift ;;
+    --backend) FFTF_LLM_BACKEND="$2"; shift ;;
+    --model)   FFTF_LLM_MODEL="$2"; shift ;;
     --latest)  TARGET="--latest" ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "unknown option: $1" >&2; usage; exit 2 ;;
@@ -75,47 +75,47 @@ done
 resolve_transcript() {
   local t="$1"
   if [ "$t" = "--latest" ]; then
-    find "$FG_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
+    find "$FFTF_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
       -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
     return
   fi
   if [ -f "$t" ]; then printf '%s\n' "$t"; return; fi
   # treat as a session uuid (with or without .jsonl)
   local hit
-  hit=$(find "$FG_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name "${t%.jsonl}.jsonl" 2>/dev/null | head -1)
+  hit=$(find "$FFTF_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name "${t%.jsonl}.jsonl" 2>/dev/null | head -1)
   printf '%s\n' "$hit"
 }
 
 FILE="$(resolve_transcript "$TARGET")"
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
-  echo "fg-capture: transcript not found for '$TARGET'" >&2; exit 1
+  echo "fftf-capture: transcript not found for '$TARGET'" >&2; exit 1
 fi
 echo "transcript: $FILE"
-echo "cwd:        $(fg_transcript_cwd "$FILE")"
+echo "cwd:        $(fftf_transcript_cwd "$FILE")"
 
 run_one() {  # backend model -> prints rendered markdown or SKIP/ERROR, with timing
   local backend="$1" model="$2" start end json rc md
-  FG_LLM_BACKEND="$backend"; FG_LLM_MODEL="$model"
-  echo "===== $(fg_llm_describe) ====="
-  if ! fg_llm_check; then echo "(backend unavailable — skipped)"; echo; return; fi
+  FFTF_LLM_BACKEND="$backend"; FFTF_LLM_MODEL="$model"
+  echo "===== $(fftf_llm_describe) ====="
+  if ! fftf_llm_check; then echo "(backend unavailable — skipped)"; echo; return; fi
   start=$(date +%s)
-  json=$(fg_distill "$FILE"); rc=$?
+  json=$(fftf_distill "$FILE"); rc=$?
   end=$(date +%s)
   if [ "$rc" -eq 2 ]; then echo "(tail too short to distill)"; echo; return; fi
   if [ "$rc" -ne 0 ]; then echo "(ERROR: distill failed)"; echo; return; fi
-  md=$(fg_render_markdown "$json"); rc=$?
+  md=$(fftf_render_markdown "$json"); rc=$?
   if [ "$rc" -eq 2 ]; then echo "(model chose SKIP — nothing worth saving)";
-  else echo "slug: $(fg_slug "$json")"; echo; printf '%s\n' "$md"; fi
+  else echo "slug: $(fftf_slug "$json")"; echo; printf '%s\n' "$md"; fi
   echo; echo "[took $(( end - start ))s]"; echo
 }
 
 echo
 if [ "$COMPARE" = 1 ]; then
-  run_one claude "${FG_CLAUDE_MODEL}"
-  run_one ollama "${FG_OLLAMA_MODEL}"
+  run_one claude "${FFTF_CLAUDE_MODEL}"
+  run_one ollama "${FFTF_OLLAMA_MODEL}"
 elif [ "$DRY" = 1 ]; then
-  run_one "$FG_LLM_BACKEND" "${FG_LLM_MODEL:-}"
+  run_one "$FFTF_LLM_BACKEND" "${FFTF_LLM_MODEL:-}"
 else
-  if fg_capture_session "$FILE"; then echo "wrote a QUESTION file under the project's capture dir";
+  if fftf_capture_session "$FILE"; then echo "wrote a QUESTION file under the project's capture dir";
   else echo "nothing written (skip or error)"; fi
 fi

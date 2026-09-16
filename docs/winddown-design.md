@@ -1,7 +1,7 @@
 # winddown — end-of-day extraction sequence
 
-**Status: design draft, folded into focusguard.** Now lives in the focusguard repo
-(shared install/uninstall, one README). Command/config naming (`wd-*` vs `fg-*`) and
+**Status: design draft, folded into Fern.** Now lives in the Fern repo
+(shared install/uninstall, one README). Command/config naming (`wd-*` vs `fftf-*`) and
 shared helpers are still to be unified — deferred to the planned project rename.
 
 ## Goal
@@ -35,9 +35,9 @@ interview stages require a typed response and **nag every 2 min until I answer**
   question it shows a response prompt, blocks for input with a 2-min timeout (the
   timeout *is* the nag — re-show on expiry), then sleeps to the next slot. After
   the last answer it invokes `/save-progress`, then the final notify.
-  - *Alt:* focusguard-style 2-min tick + on-disk state (survives logout/suspend,
+  - *Alt:* Fern-style 2-min tick + on-disk state (survives logout/suspend,
     but more moving parts). Chosen model depends on the "no-reply" decision below.
-- **Responses:** accumulate in `<state>/winddown/YYYY-MM-DD.md`, one Q/A block
+- **Responses:** accumulate in `<state>/YYYY-MM-DD.md`, one Q/A block
   each, so `/save-progress` can consume them and so there's a daily record.
 
 ## Decisions (2026-09-15)
@@ -45,17 +45,17 @@ interview stages require a typed response and **nag every 2 min until I answer**
 - [x] Response mechanism: **zenity popup** (free-text; re-shows as the nag).
 - [x] Early-answer pacing: **hold the 10-min rhythm** (don't advance before a slot).
 - [x] No-reply: **keep nagging until answered** — plus a hard backstop
-      (`WD_HARD_STOP_MIN`, default 180) so a walked-away day doesn't pop dialogs
+      (`FFTF_HARD_STOP_MIN`, default 180) so a walked-away day doesn't pop dialogs
       all evening. NB: hold-rhythm + keep-nagging means the schedule can slip past
       4pm if answers are slow; accepted.
-- [x] ~~Standalone project~~ **Folded into focusguard** (2026-09-16); no shared *code*
-      yet (own notify/chime helpers, own `WD_*` config) — that unification is deferred.
+- [x] ~~Standalone project~~ **Folded into Fern** (2026-09-16); no shared *code*
+      yet (own notify/chime helpers, own `FFTF_*` config) — that unification is deferred.
 - [x] "Check your calendar" is a *reminder*, not a calendar integration.
 - [x] Language: **bash** for now (Python still open; more of a candidate here).
 
 ## save-progress step (step 4)
 
-- [x] **Pluggable** via `WD_SAVE_PROGRESS_CMD` (run with `WD_ANSWERS_FILE`
+- [x] **Pluggable** via `FFTF_SAVE_PROGRESS_CMD` (run with `FFTF_ANSWERS_FILE`
       exported) — keeps the tool reusable; each user wires their own.
 - [x] **My case:** run the `team-awareness:save-progress` skill headlessly via
       `claude`, cwd = the personal-notes project dir (so `.temp`/MCP resolve),
@@ -72,20 +72,20 @@ interview stages require a typed response and **nag every 2 min until I answer**
       `claude -p "list your MCP tools" --output-format json`). Test by hand first.
       User's stance: try/iterate rather than perfect upfront.
 - [x] **Diagnosis wired:** step-4 output+exit go to
-      `<state>/winddown/log/save-progress-DATE.log`; a `wd:save_result` marker
+      `<state>/log/save-progress-DATE.log`; a `wd:save_result` marker
       lands in the day file; failure -> critical notify that evening; windup
       surfaces yesterday's result each morning.
 
 ## Good-evening (step 5) — composition
 
 Decision pending, but the plan: keep the "have a good evening" as a **pluggable
-hook** (`WD_GOODNIGHT_CMD`, already wired; default = one-shot notify). The
-recommended composition is a NEW focusguard feature (`fg-goodnight`) that provides
-a **presence-aware, escalating, sticky clock-off nag** — because focusguard already
+hook** (`FFTF_GOODNIGHT_CMD`, already wired; default = one-shot notify). The
+recommended composition is a NEW Fern feature (`fftf-goodnight`) that provides
+a **presence-aware, escalating, sticky clock-off nag** — because Fern already
 owns presence detection + escalation + acknowledgment, and a "you should be logged
 off" nag is the inverse of its break nag, and it should STOP once you actually
 leave the keyboard (which winddown can't detect on its own). winddown's step 5
-would just trigger it. If focusguard isn't installed, the plain notify is the
+would just trigger it. If Fern isn't installed, the plain notify is the
 fallback. Not built yet — awaiting go-ahead.
 
 ## windup (morning bookend)
