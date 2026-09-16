@@ -5,25 +5,15 @@
 [![security](https://github.com/jdcasey/future-fernando/actions/workflows/security.yml/badge.svg)](https://github.com/jdcasey/future-fernando/actions/workflows/security.yml)
 
 Supports for long, hyperfocused sessions with [Claude Code](https://claude.com/claude-code),
-built for AuDHD / ADHD working styles — all fully automatic, so none of them is
+built for AuDHD / ADHD working styles. Everything is **fully automatic** — none of it is
 something you have to remember to do:
 
-1. **Persistent break guard.** After ~60 minutes of *continuous* work at the keyboard it
-   starts an escalating, sticky desktop reminder to take a break. It is deliberately hard
-   to ignore, and it can't be silenced without actually stepping away: a real ≥10-minute
-   absence from the keyboard credits the break and resets the clock on its own. Running `fftf-afk`
-   hushes the nag immediately, but only buys a short grace window — if you keep working
-   through it instead of leaving, the nag comes back. When you genuinely *can't* break (a
-   long meeting, an incident), `fftf-pause` silences it for a bounded window without crediting
-   a break, so you come back still owing one.
-2. **Automatic answer capture.** When a session goes idle because you walked away or got
-   pulled to another tab, Fern distills the last question and its answer into a
-   `QUESTION-*.md` file in that project — so you can find "what did I ask and what was the
-   answer?" later without re-reading a transcript. No manual step; nothing to trigger.
-3. **End-of-day winddown & morning windup.** Bookends for the working day: a weekday
-   afternoon sequence that walks you out of deep focus with a short interview and saves the
-   day's progress, and a morning nudge that resurfaces where you meant to start. See
-   **[End-of-day winddown & morning windup](#end-of-day-winddown--morning-windup)** below.
+- **[Break guard](#break-guard)** — an escalating, hard-to-ignore reminder to step away
+  after ~60 min of continuous work.
+- **[Answer capture](#answer-capture)** — when you get pulled away mid-thread, Fern saves
+  the last question and its answer so you can find it later.
+- **[Winddown & windup](#end-of-day-winddown--morning-windup)** — weekday bookends that
+  walk you out of deep focus at day's end and point you back to it in the morning.
 
 ## The daily loop
 
@@ -51,12 +41,79 @@ background timer does the watching; you just work.
    behaves in a way you want to diagnose.
 
 That's the whole loop: work → get nudged to break → step away → find your captured
-answers waiting. The rest of this README is detail on how each piece works and how to
-tune it.
+answers waiting. Everything below the feature summaries is detail on how each piece works
+and how to tune it.
+
+---
+
+# Features
+
+## Break guard
+
+After ~60 minutes of *continuous* work at the keyboard, Fern starts an escalating, sticky
+desktop reminder to take a break. It is deliberately hard to ignore, and it can't be
+silenced without actually stepping away: a real ≥10-minute absence from the keyboard
+credits the break and resets the clock on its own.
+
+- `fftf-afk` hushes the nag immediately but only buys a short grace window — if you keep
+  working through it instead of leaving, the nag comes back. It does **not** count as a
+  break.
+- `fftf-pause [DURATION]` is for when you genuinely *can't* break (a long meeting, an
+  incident). It silences the nag for a bounded window **without** crediting a break, so you
+  come back still owing one. It auto-expires (default 30 min, capped at 2h); `fftf-unpause`
+  ends it early.
+
+"Continuous work" is measured from **desktop presence**, not typed prompts — watching a
+long agent run or reading a diff counts as working, and only actually leaving the keyboard
+credits a break. See [How it works](#how-it-works) and [Break guard details](#break-guard-details).
+
+## Answer capture
+
+When a session goes idle because you walked away or got pulled to another tab, Fern
+distills the last question and its answer into a `QUESTION-<slug>-<date>.md` file in that
+project's `.temp/` — so you can find "what did I ask and what was the answer?" later
+without re-reading a transcript. No manual step; nothing to trigger.
+
+Only the last real human-typed exchange is captured; automation and command runs are
+skipped. The distillation is done by a pluggable LLM backend (hosted `claude` by default,
+or a fully-offline local `ollama`). See [Answer capture details](#answer-capture-details)
+and [Capture backends](#capture-backends).
+
+## End-of-day winddown & morning windup
+
+Two day-shape bookends, each on its own weekday `systemd` timer. Where the break guard and
+capture run every couple of minutes, these fire once a day. (Incubating — see
+[`docs/winddown-design.md`](docs/winddown-design.md) for rationale and open decisions.)
+
+**winddown** (Mon–Fri, 3:15pm) gradually pulls you out of deep focus so you're mentally
+done by ~4:00. It poses three interview questions, each as a **zenity popup** that
+re-shows every ~2 min until you answer (the nag), spaced ~10 min apart:
+
+1. What did you get done today?
+2. What's most important to start with tomorrow? (a reminder to check your calendar)
+3. Any special items for today's summary?
+
+After the last answer it runs the **save-progress hook**, then a final "you're all done"
+notification. Answers accumulate in `<state>/YYYY-MM-DD.md`, each tagged with a
+stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer.
+
+**windup** (Mon–Fri, 9am) reads your **previous working day's** file and resurfaces the
+"what to start with tomorrow" answer (a zenity popup + notification) so you begin pointed
+the right way. One-shot; it just reads the keyed marker.
+
+To avoid popups all evening on a day you walk away, winddown hard-stops `FFTF_HARD_STOP_MIN`
+minutes after it starts (default 120). Nothing is saved if it backstops mid-interview. Tuning,
+the save-progress hook, and the full config table are in
+[winddown/windup configuration](#winddownwindup-configuration).
+
+---
+
+# Details & tuning
 
 ## How it works
 
-The two jobs read different signals, each chosen to answer a different question:
+The two every-few-minutes jobs read different signals, each chosen to answer a different
+question:
 
 - **Break guard — desktop presence (stackable signals).** The question is "are you
   *present*?", not "are you typing to Claude?". Long autonomous agent runs and reading a diff
@@ -68,7 +125,7 @@ The two jobs read different signals, each chosen to answer a different question:
   isn't mistaken for a break: `audio-in` (your mic is live) and `audio-out` (audio is playing —
   incoming meeting audio while muted, or a recording you're reviewing). Signals compose via
   `FFTF_PRESENCE` (e.g. `idle,audio-in,audio-out`); you're "present" if **any** enabled signal
-  says so. See **Presence signals** below.
+  says so. See [Presence signals](#presence-signals) below.
 - **Capture — a single session going stale.** Claude Code writes a transcript
   (`~/.claude/projects/<slug>/<uuid>.jsonl`) per session and bumps its mtime on every
   interaction. When one session's own mtime has been idle for a few minutes, you left it
@@ -92,7 +149,7 @@ work; only actually leaving the keyboard credits a break. This currently require
 typed-prompt signal. A portable presence backend for other desktops is tracked in
 [`TODO.md`](TODO.md).
 
-### Presence signals
+## Presence signals
 
 Set `FFTF_PRESENCE` to a profile name or a comma-list of signals. They **stack** — you're
 present if any enabled one says so, so a live mic in a meeting holds the clock even with no
@@ -119,7 +176,7 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
 > If you don't use the TrackPoint at all, `cookbook/thinkpad-trackpoint-drift/` has a
 > ready fix/test/undo (disables just the nub via a udev rule).
 
-### Break guard details
+## Break guard details
 
 - Continuous activity is measured from the enabled presence signals, ignoring absences
   shorter than `FFTF_ACTIVITY_GAP` (10 min).
@@ -152,11 +209,11 @@ It's the audit and diagnostic trail — view it with `fftf-status --log`. Daily 
 `FFTF_LOG_RETAIN_DAYS` (3) days. Like everything else, it stays on your machine and records
 only presence facts and decisions, never any content.
 
-### Answer capture details
+## Answer capture details
 
-- On idle transition, Fern asks an LLM (see **Capture backends** below) to distill the
-  recent user/assistant turns and writes `QUESTION-<slug>-<date>.md` containing the question,
-  a concise answer/conclusion, and light context. Trivial tails are skipped.
+- On idle transition, Fern asks an LLM (see [Capture backends](#capture-backends) below) to
+  distill the recent user/assistant turns and writes `QUESTION-<slug>-<date>.md` containing
+  the question, a concise answer/conclusion, and light context. Trivial tails are skipped.
 - Only the **last real exchange** is fed to the model — the most recent human-typed prompt
   and the assistant text that followed it. That is the highest-signal, smallest input
   (which also keeps a local model fast). Sessions with **no** human-typed prompt — command
@@ -240,32 +297,7 @@ FFTF_CAPTURE_PER_TICK=1       # only one slow local capture per tick, so two can
 the first does the switch, the second keeps slow-but-valid captures from being killed
 mid-generation. To change models, set `FFTF_OLLAMA_MODEL` (e.g. `llama3.1:8b`).
 
-## End-of-day winddown & morning windup
-
-Two day-shape bookends, each on its own weekday `systemd` timer. Where the break guard and
-capture run every couple of minutes, these fire once a day. (Incubating — see
-[`docs/winddown-design.md`](docs/winddown-design.md) for rationale and open decisions.)
-
-**winddown** (Mon–Fri, 3:15pm) gradually pulls you out of deep focus so you're mentally
-done by ~4:00. It poses three interview questions, each as a **zenity popup** that
-re-shows every ~2 min until you answer (the nag), spaced ~10 min apart:
-
-1. What did you get done today?
-2. What's most important to start with tomorrow? (a reminder to check your calendar)
-3. Any special items for today's summary?
-
-After the last answer it runs the **save-progress hook**, then a final "you're all done"
-notification. Answers accumulate in `<state>/YYYY-MM-DD.md`, each tagged with a
-stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer.
-
-**windup** (Mon–Fri, 9am) reads your **previous working day's** file and resurfaces the
-"what to start with tomorrow" answer (a zenity popup + notification) so you begin pointed
-the right way. One-shot; it just reads the keyed marker.
-
-To avoid popups all evening on a day you walk away, winddown hard-stops `FFTF_HARD_STOP_MIN`
-minutes after it starts (default 120). Nothing is saved if it backstops mid-interview.
-
-### winddown/windup configuration
+## winddown/windup configuration
 
 Set these for the timers in `~/.config/fftf/fftf-winddown.env` (`KEY=value`, one per line,
 no shell quoting; read by both units):
@@ -302,6 +334,25 @@ reviewable after the fact.
 
 The `FFTF_GOODNIGHT_CMD` seam (step 5) is where a presence-aware persistent clock-off nag
 would compose in; unset, step 5 is a single notification.
+
+## Command reference
+
+All commands install to `~/.local/bin`. `fftf-tick` is run by the timer; the rest are for you.
+
+| Command | What it does |
+|---------|--------------|
+| `fftf-status [--log [N]]` | Snapshot of the current stretch, presence signals, and capture backend. `--log` tails today's detection log (default 40 lines). |
+| `fftf-afk` | "Stepping away now" — hush the nag and open a short grace window. Does **not** credit a break. |
+| `fftf-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
+| `fftf-unpause` | End an active pause early. |
+| `fftf-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
+| `fftf-winddown [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FFTF_START`. |
+| `fftf-windup` | Resurface the previous working day's "start with" note. |
+| `fftf-tick` | **Internal** — one scan pass (break guard + capture). Run by `fftf.timer` every ~2 min. |
+
+---
+
+# Install & operation
 
 ## Requirements
 
@@ -346,7 +397,9 @@ journalctl --user -u fftf.service   # service logs
 
 Edit `~/.config/fftf/fftf.conf`. Every knob (timings, enable/disable each
 feature, capture model, notification stacking, output location) is documented in
-[`config/fftf.conf.example`](config/fftf.conf.example).
+[`config/fftf.conf.example`](config/fftf.conf.example). The winddown/windup timers read a
+separate `~/.config/fftf/fftf-winddown.env` — see
+[winddown/windup configuration](#winddownwindup-configuration).
 
 ## Uninstall
 
