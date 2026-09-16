@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# focusguard-capture — run capture on a single transcript, on demand.
+# fg-capture — run capture on a single transcript, on demand.
 # Handy for trying/tuning backends without waiting for the timer.
 
 set -uo pipefail
@@ -26,7 +26,7 @@ for _d in "${FG_LIB:-}" \
   if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
 done
 if [ -z "${FG_LIB:-}" ] || [ ! -f "$FG_LIB/fg-common.sh" ]; then
-  echo "focusguard-capture: cannot find focusguard libs (set FG_LIB)" >&2; exit 1
+  echo "fg-capture: cannot find focusguard libs (set FG_LIB)" >&2; exit 1
 fi
 # shellcheck source=/dev/null
 . "$FG_LIB/fg-common.sh"
@@ -37,7 +37,7 @@ fi
 
 usage() {
   cat <<EOF
-Usage: focusguard-capture [options] <transcript.jsonl | session-uuid | --latest>
+Usage: fg-capture [options] <transcript.jsonl | session-uuid | --latest>
 
   --dry-run          Print the distilled result; do NOT write a file.
   --compare          Run BOTH claude and ollama on the tail and print side by
@@ -48,9 +48,9 @@ Usage: focusguard-capture [options] <transcript.jsonl | session-uuid | --latest>
   -h, --help         This help.
 
 Examples:
-  focusguard-capture --dry-run --latest
-  focusguard-capture --compare --latest
-  focusguard-capture --dry-run --backend ollama --model llama3.2:3b <uuid>
+  fg-capture --dry-run --latest
+  fg-capture --compare --latest
+  fg-capture --dry-run --backend ollama --model llama3.2:3b <uuid>
 EOF
 }
 
@@ -88,7 +88,7 @@ resolve_transcript() {
 
 FILE="$(resolve_transcript "$TARGET")"
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
-  echo "focusguard-capture: transcript not found for '$TARGET'" >&2; exit 1
+  echo "fg-capture: transcript not found for '$TARGET'" >&2; exit 1
 fi
 echo "transcript: $FILE"
 echo "cwd:        $(fg_transcript_cwd "$FILE")"

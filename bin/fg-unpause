@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Copyright 2026 John Casey
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# fg-unpause — end an active fg-pause early. The break clock kept running while
+# paused, so if you're already overdue the nag returns on the next tick.
+
+set -uo pipefail
+
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FG_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+done
+[ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
+  echo "fg-unpause: cannot find libs (set FG_LIB)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-common.sh"
+
+now=$(date +%s)
+pause_until=$(cat "$FG_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+rm -f "$FG_STATE_DIR/pause_until"
+
+if [ "$now" -lt "$pause_until" ]; then
+  echo "Pause ended. If you're past the break interval, the nag returns shortly."
+else
+  echo "No active pause."
+fi

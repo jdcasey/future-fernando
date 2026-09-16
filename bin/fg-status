@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# focusguard-status — human-readable snapshot of the current focus/break state.
+# fg-status — human-readable snapshot of the current focus/break state, the
+# presence signals in play, and (with --log) the rolling detection log.
+#
+#   fg-status            snapshot
+#   fg-status --log [N]  tail the last N detection-log lines (default 40)
 
 set -uo pipefail
 
@@ -24,30 +28,54 @@ for _d in "${FG_LIB:-}" \
   if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
 done
 [ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
-  echo "focusguard-status: cannot find libs (set FG_LIB)" >&2; exit 1; }
+  echo "fg-status: cannot find libs (set FG_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$FG_LIB/fg-common.sh"
 # shellcheck source=/dev/null
 . "$FG_LIB/fg-llm.sh"
 
+# --- --log: show the rolling detection log and exit --------------------------
+if [ "${1:-}" = "--log" ]; then
+  n="${2:-40}"
+  f="$FG_LOG_DIR/fg-$(date +%Y%m%d).log"
+  if [ -f "$f" ]; then
+    echo "== $f (last $n lines) =="
+    tail -n "$n" "$f"
+  else
+    echo "No detection log yet for today ($f)."
+    echo "(Logging is ${FG_LOG_ENABLED:+on}; a line is written each tick when enabled.)"
+  fi
+  exit 0
+fi
+
 now=$(date +%s)
 away=$(fg_break_away_seconds)
-
-# Which signal is actually in play, for the status line.
-if [ "$FG_PRESENCE" != typed ] && fg_idle_seconds >/dev/null 2>&1; then
-  src="desktop idle"
-else
-  src="typed prompt (FG_PRESENCE=$FG_PRESENCE)"
-fi
 
 fmt() { printf '%dm %ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
 echo "focusguard status  (as of $(date '+%Y-%m-%d %H:%M:%S'))"
-echo "  presence      : $(fmt "$away") since last activity ($src)"
 
+# --- presence signals: what's enabled and what each reads now ----------------
+idle_now=$(fg_idle_seconds 2>/dev/null || echo -)
+mic="off"; fg_audio_in_active  && mic="ON"
+spk="off"; fg_audio_out_active && spk="ON"
+if [ "$FG_PRESENCE" = auto ]; then
+  sig_desc="auto (idle, else typed)"
+else
+  sig_desc="$(fg_presence_signals | tr ' ' ',' )"
+  [ -z "${sig_desc//,}" ] && sig_desc="off (no ambient sensing)"
+fi
+echo "  presence      : $(fmt "$away") since present   [signals: $sig_desc]"
+echo "  sensors       : idle=${idle_now}s  mic=${mic}  speaker=${spk}"
+
+# --- break-guard state machine (mirrors fg-tick) -----------------------------
+pause_until=$(cat "$FG_STATE_DIR/pause_until" 2>/dev/null || echo 0)
 grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
 if [ "$away" -ge "$FG_ACTIVITY_GAP" ]; then
   echo "  state         : on a break / idle (clock reset)"
+elif [ "$now" -lt "$pause_until" ]; then
+  left=$(( pause_until - now ))
+  echo "  state         : PAUSED — quiet for $(fmt "$left") (clock still running; fg-unpause to end)"
 elif [ "$now" -lt "$grace_until" ]; then
   left=$(( grace_until - now ))
   echo "  state         : afk grace — quiet for $(fmt "$left") (step away to credit it)"
@@ -58,7 +86,7 @@ else
     over=$(( active - FG_BREAK_INTERVAL ))
     lvl=$(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0)
     echo "  state         : BREAK OVERDUE by $(fmt "$over") (nag level $lvl)"
-    echo "  -> run 'afk' when you step away"
+    echo "  -> run 'fg-afk' when you step away, or 'fg-pause' if you can't yet"
   else
     left=$(( FG_BREAK_INTERVAL - active ))
     echo "  state         : active $(fmt "$active"); next reminder in ~$(fmt "$left")"
@@ -68,3 +96,4 @@ fi
 ncap=$(find "$FG_STATE_DIR/captured" -type f 2>/dev/null | wc -l | tr -d ' ')
 echo "  sessions seen : $ncap tracked for capture"
 echo "  capture llm   : $(fg_llm_describe)"
+echo "  detection log : fg-status --log   (rolling, ${FG_LOG_RETAIN_DAYS}-day retention)"

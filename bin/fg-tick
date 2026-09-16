@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# focusguard-tick — one scan pass, run every ~2 min by a systemd user timer.
+# fg-tick — one scan pass, run every ~2 min by a systemd user timer.
 #   Job A  answer capture (see lib/fg-capture.sh)
 #   Job B  break guard (below)
 
@@ -27,7 +27,7 @@ for _d in "${FG_LIB:-}" \
   if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
 done
 [ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
-  echo "focusguard-tick: cannot find libs (set FG_LIB)" >&2; exit 1; }
+  echo "fg-tick: cannot find libs (set FG_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$FG_LIB/fg-common.sh"
 # shellcheck source=/dev/null
@@ -41,11 +41,19 @@ flock -n 9 || exit 0
 
 now=$(date +%s)
 
-# Break-guard clock is driven by DESKTOP PRESENCE, not typed prompts or file
-# mtimes: reading a diff or watching an agent run counts as work, and only real
-# physical absence (desktop idle) credits a break. `away` = seconds since you
-# were last present. See fg_break_away_seconds / FG_PRESENCE in fg-common.sh.
+# Break-guard clock is driven by DESKTOP PRESENCE (stackable signals), not typed
+# prompts or file mtimes: reading a diff or watching an agent run counts as work,
+# and only real physical absence credits a break. `away` = seconds since ANY
+# enabled signal last said you were present. See fg_break_away_seconds /
+# FG_PRESENCE in fg-common.sh.
 away=$(fg_break_away_seconds)
+
+# Raw sensor snapshot for the rolling detection log (independent of which signals
+# are enabled, so the log can reveal e.g. an idle counter pinned low by pointer
+# drift). Cheap; existence/idle only, never content.
+log_idle=$(fg_idle_seconds 2>/dev/null || echo -)
+log_mic=0; fg_audio_in_active  && log_mic=1
+log_spk=0; fg_audio_out_active && log_spk=1
 
 # =============================================================================
 # Job B — break guard
@@ -67,7 +75,15 @@ fire_nag() {
   local mins=$(( active / 60 )) over=$(( (active - FG_BREAK_INTERVAL) / 60 ))
   local title body
   title="Take a break (nag #$level)"
-  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: afk"
+  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: fg-afk (or fg-pause if you can't)"
+
+  # Attach a randomly-chosen grounding practice. Lead with leaving the room / the
+  # screen — the practice only helps once you're actually away from the work.
+  local ground
+  ground=$(fg_grounding_suggestion) || ground=""
+  if [ -n "$ground" ]; then
+    body+=$'\n\n'"Leave the room / look away from the screen, then try:"$'\n'"• $ground"
+  fi
 
   local args=(-u critical -a focusguard -t 0)
   if [ "$FG_NOTIFY_STACK" != 1 ]; then
@@ -90,19 +106,32 @@ fire_nag() {
   fi
 }
 
+decision=disabled
+active=0
 if [ "$FG_BREAK_ENABLED" = 1 ]; then
   grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+  pause_until=$(cat "$FG_STATE_DIR/pause_until" 2>/dev/null || echo 0)
 
   if [ "$away" -ge "$FG_ACTIVITY_GAP" ]; then
     # Real absence: the break is credited. This is the ONLY thing that resets the
-    # clock — whether you walked away on your own or after `afk`.
+    # clock — whether you walked away on your own or after `fg-afk`. A genuine gap
+    # also clears any pause, since you actually rested.
     rm -f "$FG_STATE_DIR/stretch_start" "$FG_STATE_DIR/nag_level" \
-          "$FG_STATE_DIR/break_pending" "$FG_STATE_DIR/grace_until"
+          "$FG_STATE_DIR/break_pending" "$FG_STATE_DIR/grace_until" \
+          "$FG_STATE_DIR/pause_until"
     close_notification
+    decision=credit-break
+  elif [ "$now" -lt "$pause_until" ]; then
+    # `fg-pause`: you CAN'T break right now. Silence the nag, but do NOT reset the
+    # stretch clock or credit a break — pausing the nag is not pausing the need,
+    # so you come back overdue and get nagged the moment the pause expires.
+    close_notification
+    decision=paused
   elif [ "$now" -lt "$grace_until" ]; then
-    # `afk` grace window: stay quiet, but don't credit the break or
+    # `fg-afk` grace window: stay quiet, but don't credit the break or
     # reset the stretch clock — you haven't actually stepped away yet.
     close_notification
+    decision=grace
   else
     rm -f "$FG_STATE_DIR/grace_until"   # grace expired without a real break
     start=$(cat "$FG_STATE_DIR/stretch_start" 2>/dev/null || true)
@@ -115,9 +144,23 @@ if [ "$FG_BREAK_ENABLED" = 1 ]; then
       level=$(( $(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0) + 1 ))
       printf '%s\n' "$level" > "$FG_STATE_DIR/nag_level"
       fire_nag "$level" "$active"
+      decision="nag:$level"
+    else
+      decision=active
     fi
   fi
 fi
+
+# Rolling detection log: one line per tick so break-guard behavior (and wrong
+# assumptions, e.g. pointer drift pinning idle) can be diagnosed after the fact.
+pause_until=$(cat "$FG_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+grace_until=$(cat "$FG_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+log_nag=$(cat "$FG_STATE_DIR/nag_level" 2>/dev/null || echo 0)
+log_pleft=0; [ "$now" -lt "$pause_until" ] && log_pleft=$(( pause_until - now ))
+log_gleft=0; [ "$now" -lt "$grace_until" ] && log_gleft=$(( grace_until - now ))
+fg_log_detection "idle=${log_idle} mic=${log_mic} spk=${log_spk} away=${away}" \
+                 "active=${active} nag=${log_nag} pause=${log_pleft} grace=${log_gleft}" \
+                 "presence=${FG_PRESENCE} decision=${decision}"
 
 # =============================================================================
 # Job A — answer capture (walked-away sessions)

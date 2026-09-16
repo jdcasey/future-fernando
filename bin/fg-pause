@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Copyright 2026 John Casey
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# fg-pause [DURATION] — you CAN'T take a break right now (long meeting, incident,
+# demo). Silences the break nag for a window WITHOUT crediting a break: the
+# stretch clock keeps running, so when the pause expires you're still overdue and
+# get nagged again. This is the opposite of fg-afk, which anticipates a real
+# break. Auto-expires (default 30m, capped at 2h) so a forgotten pause can't
+# disable the guard all day; run fg-unpause to end it early.
+#
+# DURATION accepts 45 (minutes), 30m, 2h, or 600s. No arg = FG_PAUSE_DEFAULT.
+
+set -uo pipefail
+
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FG_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fg-common.sh" ]; then FG_LIB="$_d"; break; fi
+done
+[ -n "${FG_LIB:-}" ] && [ -f "$FG_LIB/fg-common.sh" ] || {
+  echo "fg-pause: cannot find libs (set FG_LIB)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$FG_LIB/fg-common.sh"
+
+# Parse a duration token into seconds. Bare number = minutes.
+parse_dur() {
+  local t="$1" n unit
+  n=${t%[smhSMH]}; unit=${t#"$n"}
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  case "$unit" in
+    s|S) printf '%s\n' "$n" ;;
+    h|H) printf '%s\n' "$(( n * 3600 ))" ;;
+    m|M|'') printf '%s\n' "$(( n * 60 ))" ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ $# -ge 1 ]; then
+  dur=$(parse_dur "$1") || { echo "fg-pause: bad duration '$1' (try 45, 30m, 2h, 600s)" >&2; exit 2; }
+else
+  dur="$FG_PAUSE_DEFAULT"
+fi
+
+capped=""
+if [ "$dur" -gt "$FG_PAUSE_MAX" ]; then dur="$FG_PAUSE_MAX"; capped=" (capped at max)"; fi
+
+now=$(date +%s)
+printf '%s\n' "$(( now + dur ))" > "$FG_STATE_DIR/pause_until"
+
+# Silence the current escalation immediately, but leave the stretch clock alone —
+# the break is still owed.
+rm -f "$FG_STATE_DIR/nag_level" "$FG_STATE_DIR/break_pending"
+id=$(cat "$FG_STATE_DIR/notif_id" 2>/dev/null || true)
+if [ -n "${id:-}" ] && [ "$id" != 0 ]; then
+  gdbus call --session \
+    --dest org.freedesktop.Notifications \
+    --object-path /org/freedesktop/Notifications \
+    --method org.freedesktop.Notifications.CloseNotification "$id" \
+    >/dev/null 2>&1 || true
+fi
+rm -f "$FG_STATE_DIR/notif_id"
+
+mins=$(( dur / 60 ))
+echo "Paused for ${mins} min${capped} — nag silenced until $(date -d "@$(( now + dur ))" '+%H:%M')."
+echo "The break clock keeps running: you'll be nagged again when the pause ends"
+echo "if you're still overdue. Run fg-unpause to end early."
