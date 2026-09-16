@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Copyright 2026 John Casey
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# fftf-unpause — end an active fftf-pause early. The break clock kept running while
+# paused, so if you're already overdue the nag returns on the next tick.
+
+set -uo pipefail
+
+_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+for _d in "${FFTF_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib" \
+          "$(dirname "$_self")/../lib"; do
+  if [ -n "$_d" ] && [ -f "$_d/fftf-common.sh" ]; then FFTF_LIB="$_d"; break; fi
+done
+[ -n "${FFTF_LIB:-}" ] && [ -f "$FFTF_LIB/fftf-common.sh" ] || {
+  echo "fftf-unpause: cannot find libs (set FFTF_LIB)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$FFTF_LIB/fftf-common.sh"
+
+now=$(date +%s)
+pause_until=$(cat "$FFTF_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+rm -f "$FFTF_STATE_DIR/pause_until"
+
+if [ "$now" -lt "$pause_until" ]; then
+  echo "Pause ended. If you're past the break interval, the nag returns shortly."
+else
+  echo "No active pause."
+fi

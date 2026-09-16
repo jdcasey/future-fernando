@@ -13,23 +13,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# uninstall.sh — remove focusguard. Config and state are left in place unless
+# uninstall.sh — remove Fern. Config and state are left in place unless
 # you pass --purge.
 
 set -euo pipefail
 
 BIN_DIR="$HOME/.local/bin"
-LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/focusguard"
+LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fftf"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/focusguard"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fftf"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fftf"
 
-echo "==> Disabling timer"
-systemctl --user disable --now focusguard.timer 2>/dev/null || true
+echo "==> Disabling timers"
+systemctl --user disable --now fftf.timer fftf-winddown.timer fftf-windup.timer 2>/dev/null || true
+# pre-Fern timers, in case an old install is still around
+systemctl --user disable --now focusguard.timer winddown.timer windup.timer 2>/dev/null || true
 
 echo "==> Removing units, scripts, and libs"
-rm -f "$UNIT_DIR/focusguard.timer" "$UNIT_DIR/focusguard.service"
-rm -f "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
+rm -f "$UNIT_DIR/fftf.timer" "$UNIT_DIR/fftf.service" \
+      "$UNIT_DIR/fftf-winddown.timer" "$UNIT_DIR/fftf-winddown.service" \
+      "$UNIT_DIR/fftf-windup.timer" "$UNIT_DIR/fftf-windup.service"
+rm -f "$BIN_DIR/fftf-tick" "$BIN_DIR/fftf-capture" "$BIN_DIR/fftf-afk" \
+      "$BIN_DIR/fftf-status" "$BIN_DIR/fftf-pause" "$BIN_DIR/fftf-unpause" \
+      "$BIN_DIR/fftf-winddown" "$BIN_DIR/fftf-windup" "$BIN_DIR/fftf-save-progress-hook"
+# pre-Fern names from earlier releases
+rm -f "$UNIT_DIR/focusguard.service" "$UNIT_DIR/focusguard.timer" \
+      "$UNIT_DIR/winddown.service" "$UNIT_DIR/winddown.timer" \
+      "$UNIT_DIR/windup.service" "$UNIT_DIR/windup.timer"
+rm -f "$BIN_DIR/fg-tick" "$BIN_DIR/fg-capture" "$BIN_DIR/fg-afk" \
+      "$BIN_DIR/fg-status" "$BIN_DIR/fg-pause" "$BIN_DIR/fg-unpause" \
+      "$BIN_DIR/winddown" "$BIN_DIR/windup" "$BIN_DIR/wd-save-progress-hook" \
+      "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
       "$BIN_DIR/afk" "$BIN_DIR/break-start" "$BIN_DIR/break-done" \
       "$BIN_DIR/focusguard-status"
 rm -rf "$LIB_DIR"
@@ -38,8 +52,13 @@ systemctl --user daemon-reload
 if [ "${1:-}" = "--purge" ]; then
   echo "==> Purging config and state"
   rm -rf "$CONF_DIR" "$STATE_DIR"
+  # pre-Fern config/state locations
+  rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/focusguard" \
+         "${XDG_CONFIG_HOME:-$HOME/.config}/winddown" \
+         "${XDG_STATE_HOME:-$HOME/.local/state}/focusguard" \
+         "${XDG_STATE_HOME:-$HOME/.local/state}/winddown"
 else
-  echo "Left config ($CONF_DIR) and state ($STATE_DIR) in place. Use --purge to remove them."
+  echo "Left config ($CONF_DIR) and state ($STATE_DIR) in place. Use --purge to remove them (also clears any pre-Fern focusguard/winddown dirs)."
 fi
 
 echo "Done."

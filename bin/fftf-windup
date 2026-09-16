@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Copyright 2026 John Casey
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# windup — morning orientation. Resurfaces the starting point you chose at the
+# previous working day's winddown, so you begin the day pointed the right way.
+# Fire from a systemd user timer at 9am Mon-Fri. One-shot by design (a morning
+# nudge, not a task-gate); upgrade to persistent nagging later if it helps.
+set -uo pipefail
+
+: "${FFTF_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/fftf}"
+: "${FFTF_WINDUP_KEY:=tomorrow}"   # which winddown answer to resurface
+: "${FFTF_SOUND_ENABLED:=1}"
+: "${FFTF_WINDUP_DIALOG:=1}"       # 1 = zenity info popup (plus notify); 0 = notify only
+
+notify() { notify-send -a windup -u "${2:-normal}" "windup" "$1" 2>/dev/null || true; }
+chime()  { [ "$FFTF_SOUND_ENABLED" = 1 ] || return 0
+           canberra-gtk-play -i "${1:-message}" >/dev/null 2>&1 || true; }
+
+# Print the answer following a "<!-- wd:KEY -->" marker, up to the next blank line
+# or heading.  extract KEY FILE
+extract() {
+  awk -v key="wd:$1" '
+    index($0, key) { f=1; next }
+    f {
+      if ($0 ~ /^###/) exit
+      if ($0 ~ /^[[:space:]]*$/) { if (s) exit; else next }
+      s=1; print
+    }' "$2"
+}
+
+today="$(date +%F).md"
+
+# Most recent day file strictly before today (handles Mon -> Fri gaps, PTO, etc.).
+latest=""
+if [ -d "$FFTF_STATE_DIR" ]; then
+  latest=$(find "$FFTF_STATE_DIR" -maxdepth 1 -name '????-??-??.md' -printf '%f\n' 2>/dev/null \
+           | awk -v t="$today" '$0 < t' | sort | tail -1)
+fi
+
+chime message
+if [ -z "$latest" ]; then
+  notify "Good morning! No saved starting point from your last session." normal
+  exit 0
+fi
+
+answer=$(extract "$FFTF_WINDUP_KEY" "$FFTF_STATE_DIR/$latest")
+save_result=$(extract save_result "$FFTF_STATE_DIR/$latest")
+
+day="${latest%.md}"
+if [ -z "${answer//[[:space:]]/}" ]; then
+  msg="Good morning! (No 'start here' note found from $day.)"
+else
+  msg="Good morning. From $day, you planned to start with:
+
+$answer"
+fi
+# Diagnostic: how did yesterday's save-progress go? (for wiring up the hook)
+if [ -n "${save_result//[[:space:]]/}" ]; then
+  msg="$msg
+
+(save-progress on $day: $save_result)"
+fi
+
+if [ "$FFTF_WINDUP_DIALOG" = 1 ] && command -v zenity >/dev/null 2>&1; then
+  # Background so this one-shot service exits promptly; notify is the durable copy.
+  zenity --info --title="windup" --width=480 --text="$msg" >/dev/null 2>&1 &
+fi
+notify "$msg" normal
+exit 0

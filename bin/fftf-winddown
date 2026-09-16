@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Copyright 2026 John Casey
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# winddown — end-of-day extraction sequence (design draft, incubating).
+#
+# Walks a fixed sequence of interview questions, each delivered as a zenity popup
+# that re-shows every ~2 min (the nag) until answered. Questions advance on a
+# ~10-min rhythm but never before their slot AND never past an unanswered one
+# ("hold rhythm" + "keep nagging"). After the last answer it runs the
+# save-progress hook, then a final "you're done" notification.
+#
+# Trigger this from a systemd user timer at 15:15 Mon-Fri (see systemd/). For
+# testing, run with --now (start immediately) and a short interval, e.g.:
+#   FFTF_INTERVAL_MIN=1 FFTF_NAG_SEC=20 fftf-winddown --now
+set -uo pipefail
+
+# ---- config (env-overridable; a config file can be added later) -------------
+: "${FFTF_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/fftf}"
+: "${FFTF_START:=15:15}"          # clock time the sequence anchors to
+: "${FFTF_INTERVAL_MIN:=10}"      # spacing between question slots (minutes)
+: "${FFTF_NAG_SEC:=120}"          # re-show the popup this often until answered
+: "${FFTF_HARD_STOP_MIN:=120}"    # safety backstop: stop nagging N min after start
+: "${FFTF_SOUND_ENABLED:=1}"
+# Step 4 hook. If set, it is run with FFTF_ANSWERS_FILE exported (the day's Q/A
+# markdown). Empty = a placeholder that just notes it's unconfigured. This is the
+# seam where /save-progress gets wired once its contract is known.
+: "${FFTF_SAVE_PROGRESS_CMD:=}"
+# Step 5 hook ("have a good evening"). If set, it is run instead of the plain
+# one-shot notify — the seam for composing a presence-aware persistent clock-off
+# nag (e.g. a Fern 'fftf-goodnight'). Empty = a single notification.
+: "${FFTF_GOODNIGHT_CMD:=}"
+
+# The interview. Each entry is "key|question": the key is a stable marker written
+# into the day file so other tools (e.g. windup) can extract a specific answer
+# even if the wording changes.
+QUESTIONS=(
+  "done|It's almost time to be done today. What did you get done?"
+  "tomorrow|What things are most important to start with tomorrow? Check your calendar so you can see."
+  "special|Are there any special items that should be included in today's summary?"
+)
+
+START_NOW=0
+[ "${1:-}" = "--now" ] && START_NOW=1
+
+command -v zenity >/dev/null 2>&1 || { echo "winddown: zenity is required" >&2; exit 1; }
+
+FFTF_LOG_DIR="$FFTF_STATE_DIR/log"
+mkdir -p "$FFTF_STATE_DIR" "$FFTF_LOG_DIR" 2>/dev/null || true
+day_file="$FFTF_STATE_DIR/$(date +%F).md"
+
+now() { date +%s; }
+
+notify() {
+  notify-send -a winddown -u "${2:-normal}" "winddown" "$1" 2>/dev/null || true
+}
+
+chime() {
+  [ "$FFTF_SOUND_ENABLED" = 1 ] || return 0
+  canberra-gtk-play -i "${1:-message}" >/dev/null 2>&1 || true
+}
+
+# Anchor: today at FFTF_START, or now if --now.
+if [ "$START_NOW" = 1 ]; then
+  start_epoch=$(now)
+else
+  start_epoch=$(date -d "today $FFTF_START" +%s 2>/dev/null) || start_epoch=$(now)
+fi
+hard_stop=$(( start_epoch + FFTF_HARD_STOP_MIN * 60 ))
+
+# Ask one question, re-showing every FFTF_NAG_SEC until a non-empty answer is
+# given, or the hard backstop is hit. Prints the answer on stdout; returns 1 if
+# the backstop aborted the sequence.
+ask_until_answered() {
+  local q="$1" ans rc first=1
+  while :; do
+    if [ "$(now)" -ge "$hard_stop" ]; then
+      notify "Stopping for now — backstop reached. Nothing was saved." critical
+      return 1
+    fi
+    [ "$first" = 1 ] && chime message || { chime dialog-warning; notify "Still waiting: $q" critical; }
+    first=0
+    ans=$(zenity --entry --title="winddown" --width=520 \
+                 --text="$q" --timeout="$FFTF_NAG_SEC" 2>/dev/null)
+    rc=$?
+    # rc 0 = OK; 1 = cancel; 5 = timeout. Only a non-empty OK counts.
+    if [ "$rc" = 0 ] && [ -n "${ans//[[:space:]]/}" ]; then
+      printf '%s\n' "$ans"
+      return 0
+    fi
+    # otherwise loop: nag and re-show
+  done
+}
+
+# ---- run the sequence -------------------------------------------------------
+{
+  printf '# Winddown — %s\n\n' "$(date '+%A %Y-%m-%d')"
+} >> "$day_file"
+
+i=0
+for entry in "${QUESTIONS[@]}"; do
+  key="${entry%%|*}"; q="${entry#*|}"
+  slot=$(( start_epoch + i * FFTF_INTERVAL_MIN * 60 ))
+  # Hold the rhythm: never pose a question before its slot.
+  while [ "$(now)" -lt "$slot" ]; do
+    sleep 15
+    [ "$(now)" -ge "$hard_stop" ] && { notify "Winddown stopped (backstop)." critical; exit 1; }
+  done
+
+  answer=$(ask_until_answered "$q") || exit 1
+  {
+    printf '### %s\n<!-- wd:%s -->\n\n%s\n\n' "$q" "$key" "$answer"
+  } >> "$day_file"
+  i=$(( i + 1 ))
+done
+
+# ---- step 4: save-progress hook ---------------------------------------------
+# The hook is an unattended headless run, so capture EVERYTHING for diagnosis:
+# full stdout+stderr to a dated log, and a keyed result line in the day file so
+# windup can surface it the next morning.
+notify "Saving today's progress…"
+chime message
+sp_log="$FFTF_LOG_DIR/save-progress-$(date +%F).log"
+if [ -n "$FFTF_SAVE_PROGRESS_CMD" ]; then
+  {
+    printf '===== save-progress %s =====\n' "$(date --iso-8601=seconds)"
+    printf 'cmd: %s\n' "$FFTF_SAVE_PROGRESS_CMD"
+    printf 'answers-file: %s\n\n' "$day_file"
+  } >> "$sp_log"
+  FFTF_ANSWERS_FILE="$day_file" bash -c "$FFTF_SAVE_PROGRESS_CMD" >> "$sp_log" 2>&1
+  sp_rc=$?
+  printf '\n----- exit %s at %s -----\n\n' "$sp_rc" "$(date --iso-8601=seconds)" >> "$sp_log"
+  {
+    printf '### save-progress result\n<!-- wd:save_result -->\n\n'
+    printf 'exit %s at %s — log: %s\n\n' "$sp_rc" "$(date --iso-8601=seconds)" "$sp_log"
+  } >> "$day_file"
+  if [ "$sp_rc" -eq 0 ]; then
+    notify "Progress saved (exit 0). Log: $sp_log" normal
+  else
+    notify "save-progress FAILED (exit $sp_rc) — see $sp_log" critical
+  fi
+else
+  {
+    printf '### save-progress result\n<!-- wd:save_result -->\n\n'
+    printf 'skipped — FFTF_SAVE_PROGRESS_CMD unset\n\n'
+  } >> "$day_file"
+  notify "save-progress isn't wired up yet — answers saved to today's file." normal
+fi
+
+# ---- step 5: done -----------------------------------------------------------
+chime complete
+if [ -n "$FFTF_GOODNIGHT_CMD" ]; then
+  # Composable seam: hand off to a presence-aware persistent clock-off nag
+  # (e.g. Fern's fftf-goodnight). Falls back to a plain notify if unset.
+  FFTF_ANSWERS_FILE="$day_file" bash -c "$FFTF_GOODNIGHT_CMD"
+else
+  notify "You're all done! Have a good evening!" normal
+fi
+exit 0

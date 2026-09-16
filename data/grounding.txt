@@ -1,0 +1,27 @@
+# Fern — grounding / break practices
+#
+# One practice per line, "Name — one-line instructions". Lines starting with '#'
+# and blank lines are ignored. The break-guard picks ONE at random per nag and
+# appends it to the reminder, under a fixed "leave the room / look away from the
+# screen" lead-in (added by the notifier, not stored here).
+#
+# Keep each line short enough to read at a glance in a notification. Add your own.
+
+# --- breath-based ---
+Box breathing — In 4, hold 4, out 4, hold 4. Repeat 4 rounds.
+4-7-8 breath — In through the nose 4, hold 7, out through the mouth 8. Repeat 4 times.
+Physiological sigh — Two nose inhales (second one short, stacked on the first), then one long slow mouth exhale. 3 times.
+Coherent breathing — Slow, equal in and out, about 5-6 seconds each, for a minute or two.
+Belly breathing — Hand on your stomach; breathe so only your belly rises, not your chest. 6 slow breaths.
+
+# --- sensory grounding ---
+5-4-3-2-1 — Name 5 things you see, 4 you hear, 3 you can touch, 2 you smell, 1 you taste.
+3-3-3 — Name 3 things you see, 3 you hear, then move 3 body parts.
+Temperature shift — Run cold water over your hands or splash your face; notice the change.
+Orienting — Slowly turn your head and look around, letting your eyes land wherever they want.
+
+# --- body-based ---
+Feet on floor — Press both feet flat, feel the ground push back, notice the contact for 30 seconds.
+Progressive release — Tense one muscle group hard for 5 seconds, then let go. Work up the body.
+Butterfly hug — Cross your arms over your chest and alternate gentle taps on each shoulder.
+Eye-hold reset — Head still, look as far to one side as is comfortable and hold until you sigh, yawn, or swallow; return to center, then repeat on the other side.
