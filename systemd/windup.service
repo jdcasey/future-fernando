@@ -1,0 +1,7 @@
+[Unit]
+Description=windup — morning orientation from the previous day's winddown
+
+[Service]
+Type=oneshot
+# Needs the desktop session env for zenity/notify-send (imported by install.sh).
+ExecStart=%h/.local/bin/windup

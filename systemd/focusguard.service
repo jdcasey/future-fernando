@@ -11,6 +11,6 @@ PartOf=graphical-session.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/focusguard-tick
+ExecStart=%h/.local/bin/fg-tick
 # Keep a single pass from hanging forever if headless capture wedges.
 TimeoutStartSec=300

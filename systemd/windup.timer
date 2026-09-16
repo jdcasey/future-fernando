@@ -1,0 +1,10 @@
+[Unit]
+Description=Start windup at 9am on weekdays
+
+[Timer]
+OnCalendar=Mon..Fri 09:00
+# No catch-up run if the machine was off at 9am — a morning nudge at noon is moot.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

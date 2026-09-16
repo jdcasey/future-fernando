@@ -24,22 +24,30 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/focusguard"
 
-echo "==> Disabling timer"
-systemctl --user disable --now focusguard.timer 2>/dev/null || true
+echo "==> Disabling timers"
+systemctl --user disable --now focusguard.timer winddown.timer windup.timer 2>/dev/null || true
 
 echo "==> Removing units, scripts, and libs"
-rm -f "$UNIT_DIR/focusguard.timer" "$UNIT_DIR/focusguard.service"
+rm -f "$UNIT_DIR/focusguard.timer" "$UNIT_DIR/focusguard.service" \
+      "$UNIT_DIR/winddown.timer" "$UNIT_DIR/winddown.service" \
+      "$UNIT_DIR/windup.timer" "$UNIT_DIR/windup.service"
+rm -f "$BIN_DIR/fg-tick" "$BIN_DIR/fg-capture" "$BIN_DIR/fg-afk" \
+      "$BIN_DIR/fg-status" "$BIN_DIR/fg-pause" "$BIN_DIR/fg-unpause" \
+      "$BIN_DIR/winddown" "$BIN_DIR/windup" "$BIN_DIR/wd-save-progress-hook"
+# legacy names from earlier releases
 rm -f "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
       "$BIN_DIR/afk" "$BIN_DIR/break-start" "$BIN_DIR/break-done" \
       "$BIN_DIR/focusguard-status"
 rm -rf "$LIB_DIR"
 systemctl --user daemon-reload
 
+WD_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/winddown"
+WD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/winddown"
 if [ "${1:-}" = "--purge" ]; then
   echo "==> Purging config and state"
-  rm -rf "$CONF_DIR" "$STATE_DIR"
+  rm -rf "$CONF_DIR" "$STATE_DIR" "$WD_CONF_DIR" "$WD_STATE_DIR"
 else
-  echo "Left config ($CONF_DIR) and state ($STATE_DIR) in place. Use --purge to remove them."
+  echo "Left config ($CONF_DIR, $WD_CONF_DIR) and state ($STATE_DIR, $WD_STATE_DIR) in place. Use --purge to remove them."
 fi
 
 echo "Done."

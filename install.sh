@@ -21,6 +21,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BIN_DIR="$HOME/.local/bin"
 LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/lib"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/focusguard/data"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/focusguard"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/focusguard"
@@ -43,22 +44,46 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 [ -n "$claude_bin" ] && echo "    claude: $claude_bin"
 command -v ollama >/dev/null 2>&1 && echo "    ollama: $(command -v ollama)"
+# pactl is optional: only the audio-in/audio-out presence signals need it. The
+# default presence profile uses it for meeting detection, so warn if absent.
+if ! command -v pactl >/dev/null 2>&1; then
+  echo "    NOTE: pactl not found — audio presence (mic/speaker) signals will be inert."
+  echo "          Break guard still works on desktop idle. Install pipewire-utils/pulseaudio-utils to enable them."
+fi
+# zenity drives the winddown interview popups; the break guard doesn't need it.
+if ! command -v zenity >/dev/null 2>&1; then
+  echo "    NOTE: zenity not found — the winddown end-of-day interview can't prompt."
+  echo "          Break guard/capture are unaffected. Install zenity to use winddown."
+fi
 
 echo "==> Installing libs to $LIB_DIR"
 mkdir -p "$LIB_DIR"
 install -m 0644 "$here"/lib/*.sh "$LIB_DIR/"
 
+echo "==> Installing data to $DATA_DIR"
+mkdir -p "$DATA_DIR"
+install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt"
+
 echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
-install -m 0755 "$here/bin/focusguard-tick"    "$BIN_DIR/focusguard-tick"
-install -m 0755 "$here/bin/focusguard-capture" "$BIN_DIR/focusguard-capture"
-install -m 0755 "$here/bin/afk"                "$BIN_DIR/afk"
-install -m 0755 "$here/bin/focusguard-status"   "$BIN_DIR/focusguard-status"
+for cmd in fg-tick fg-capture fg-afk fg-status fg-pause fg-unpause winddown windup; do
+  install -m 0755 "$here/bin/$cmd" "$BIN_DIR/$cmd"
+done
+# Example winddown save-progress hook, installed to a space-free path so it's easy
+# to reference from winddown.env (point WD_SAVE_PROGRESS_CMD at it).
+install -m 0755 "$here/contrib/save-progress-hook.sh" "$BIN_DIR/wd-save-progress-hook"
+# Remove binaries from earlier releases that used un-prefixed / focusguard-* names,
+# so a re-install doesn't leave stale duplicates on the PATH.
+rm -f "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
+      "$BIN_DIR/focusguard-status" "$BIN_DIR/afk" \
+      "$BIN_DIR/break-start" "$BIN_DIR/break-done"
 
 echo "==> Installing systemd user units to $UNIT_DIR"
 mkdir -p "$UNIT_DIR"
-install -m 0644 "$here/systemd/focusguard.service" "$UNIT_DIR/focusguard.service"
-install -m 0644 "$here/systemd/focusguard.timer"   "$UNIT_DIR/focusguard.timer"
+for u in focusguard.service focusguard.timer \
+         winddown.service winddown.timer windup.service windup.timer; do
+  install -m 0644 "$here/systemd/$u" "$UNIT_DIR/$u"
+done
 
 echo "==> Config"
 mkdir -p "$CONF_DIR"
@@ -86,17 +111,20 @@ if [ -d "$PROJECTS_DIR" ]; then
              -printf '%T@ %p\n' 2>/dev/null)
 fi
 
-echo "==> Enabling timer"
+echo "==> Enabling timers"
 systemctl --user daemon-reload
-# Make the desktop session env (dbus/wayland) available to the service.
+# Make the desktop session env (dbus/wayland) available to the services.
 systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
-systemctl --user enable --now focusguard.timer
+systemctl --user enable --now focusguard.timer winddown.timer windup.timer
 
 echo
-echo "Installed. Timer status:"
-systemctl --user --no-pager status focusguard.timer | sed -n '1,4p' || true
+echo "Installed. Timers:"
+systemctl --user list-timers focusguard.timer winddown.timer windup.timer --no-pager 2>/dev/null | sed -n '1,4p' || true
 echo
-echo "Make sure $BIN_DIR is on your PATH so 'afk' works everywhere."
-echo "Check state any time with:  focusguard-status"
+echo "Make sure $BIN_DIR is on your PATH so 'fg-afk' works everywhere."
+echo "Check state any time with:  fg-status         (add --log to see detections)"
+echo "Step away / can't break:    fg-afk  /  fg-pause"
 echo "Test a scan now with:       systemctl --user start focusguard.service"
-echo "Try/compare capture with:   focusguard-capture --compare --latest"
+echo "Try/compare capture with:   fg-capture --compare --latest"
+echo "Test winddown now (fast):   WD_INTERVAL_MIN=1 WD_NAG_SEC=20 winddown --now"
+echo "To wire save-progress, see: contrib/save-progress-hook.sh + docs/winddown-design.md"
