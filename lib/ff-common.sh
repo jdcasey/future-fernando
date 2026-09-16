@@ -156,7 +156,11 @@ ff_audio_in_active() {
 # mic (music, videos), so it is opt-in. Existence check only, never content.
 ff_audio_out_active() {
   command -v "$FERN_PACTL_BIN" >/dev/null 2>&1 || return 1
-  "$FERN_PACTL_BIN" list short sink-inputs 2>/dev/null | grep -q '[^[:space:]]'
+  # A sink is RUNNING only while audio is actually flowing to hardware; it drops
+  # to IDLE/SUSPENDED when nothing is really playing. Keying on sink-inputs alone
+  # misfires: speech-dispatcher's dummy output holds a permanent, uncorked-but-
+  # silent sink-input, which would read as perpetual audio-out and pin presence on.
+  "$FERN_PACTL_BIN" list short sinks 2>/dev/null | awk '{print $NF}' | grep -qi '^running$'
 }
 
 # Resolve FERN_PRESENCE (profile name or comma-list) into a space-separated signal

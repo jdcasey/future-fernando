@@ -32,6 +32,11 @@
 #     audio-out  speaker in use (an app is playing) — catches muted-listening and
 #                recording playback. NOISY (music, videos), so it's opt-in; enable
 #                only if you don't play audio through speakers casually.
+#                CAUTION: currently unsafe — the nag itself plays a sound, so a
+#                stray beep can register as audio-out and keep the clock present
+#                (self-sustaining nag). A single-sample check can't tell a beep
+#                from real playback; safe use needs debouncing (see TODO.md).
+#                Leave OFF until that lands.
 #     typed      legacy: seconds since your last typed Claude prompt.
 #
 #   Audio signals are ADDITIVE — they only hold the clock "present"; combine them

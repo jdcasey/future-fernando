@@ -22,6 +22,25 @@ the burst pattern.
       micro-activity); prefer the OS fix. The audio signals do NOT help here — they only
       pull toward "present," never toward crediting a break.
 
+## Known issue: audio-out can self-sustain the nag (disabled for now)
+
+**Found 2026-09-16.** `audio-out` presence keyed on a sink-input merely *existing*, which
+the permanent uncorked-but-silent `speech-dispatcher-dummy` stream pinned to "present" 24/7
+— the break clock never saw an absence and nagged indefinitely. Narrowed `ff_audio_out_active`
+to a sink in RUNNING state (ignores the dummy), but that exposed a deeper flaw: **the nag
+itself plays a sound** (`canberra-gtk-play`, `ff-tick`), so a stray beep briefly drives a
+sink RUNNING. A single-tick sample can't tell Fern's own beep from real playback, so
+audio-out can read that beep as presence and keep nagging itself. Not a tight loop (beep is
+~1 s, tick is ~2 min) but a real intermittent self-trigger.
+
+**Disabled for now**: `audio-out` dropped from the daily-driver config and marked unsafe in
+`ff.conf.example`. `audio-in` still covers meetings.
+
+- [ ] Redesign before re-enabling: **debounce** RUNNING across a window that exceeds the
+      longest nag beep sequence, so sporadic alarm sounds can't count — only sustained
+      playback (RUNNING held across N consecutive ticks / T seconds) should. Optionally also
+      exclude Fern's own sound event. Leave audio-out off until this lands.
+
 ## Possible rewrite to a real language (Python?)
 
 Raised 2026-09-15: config/state handling and the stacking-signal logic are approaching the
@@ -133,6 +152,6 @@ tree, and it multiplies per OS.
       case (mic/speaker in use holds the clock). Pure silent reading is still uncovered; add
       a tiebreaker only if it actually bites (an agent-file-activity tiebreaker reintroduces
       the overnight-agent false positive, so avoid unless proven necessary).
-- [ ] Validate `audio-in`/`audio-out` against a real meeting (mic muted vs unmuted) and a
-      recording playback; confirm the streams persist through silence (the mic-while-muted
-      case was the open question that motivated adding `audio-out`).
+- [ ] Validate `audio-in` against a real meeting (mic muted vs unmuted); confirm the stream
+      persists through silence (the mic-while-muted case). `audio-out` validation is deferred
+      — it's disabled pending the debounce redesign (see the audio-out known-issue section).
