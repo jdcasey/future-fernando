@@ -3,8 +3,8 @@ Description=winddown — end-of-day extraction sequence
 
 [Service]
 Type=simple
-# Optional env (FFTF_SAVE_PROGRESS_CMD, FFTF_GOODNIGHT_CMD, timing overrides, …).
-EnvironmentFile=-%h/.config/fftf/fftf-winddown.env
+# Optional env (FERN_SAVE_PROGRESS_CMD, FERN_GOODNIGHT_CMD, timing overrides, …).
+EnvironmentFile=-%h/.config/ff/ff-winddown.env
 # Lives ~45 min while it walks the sequence; needs the desktop session env for
 # zenity/notify-send (imported by install.sh, mirroring Fern).
-ExecStart=%h/.local/bin/fftf-winddown
+ExecStart=%h/.local/bin/ff-winddown

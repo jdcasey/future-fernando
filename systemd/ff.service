@@ -1,7 +1,7 @@
 # Copyright 2026 John Casey
 # Licensed under the Apache License, Version 2.0. See LICENSE.
 #
-# One Fern scan pass. Triggered by fftf.timer.
+# One Fern scan pass. Triggered by ff.timer.
 
 [Unit]
 Description=Fern scan — break guard + session answer capture
@@ -11,6 +11,6 @@ PartOf=graphical-session.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/fftf-tick
+ExecStart=%h/.local/bin/ff-tick
 # Keep a single pass from hanging forever if headless capture wedges.
 TimeoutStartSec=300

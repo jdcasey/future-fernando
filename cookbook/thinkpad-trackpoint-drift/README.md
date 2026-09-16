@@ -6,12 +6,12 @@ Fern's break guard decides "you've stepped away" from GNOME's idle counter
 (`org.gnome.Mutter.IdleMonitor.GetIdletime`) — seconds since the last input.
 On many ThinkPads the built-in **TrackPoint** (the red nub) emits phantom pointer
 events when idle ("drift"). Each phantom event resets the idle counter, so a real
-absence often never reaches `FFTF_ACTIVITY_GAP`. Result: no break is ever credited
+absence often never reaches `FERN_ACTIVITY_GAP`. Result: no break is ever credited
 and Fern nags you even after you've walked away.
 
 The drift is **bursty**, not constant — a hands-off sample can show idle pinned
 under 3 s while it should be climbing. Fern's rolling detection log
-(`fftf-status --log`) exposes it: look for `idle=` staying low across ticks where you
+(`ff-status --log`) exposes it: look for `idle=` staying low across ticks where you
 know you were away.
 
 ## The fix

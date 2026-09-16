@@ -19,13 +19,13 @@
 # nudge, not a task-gate); upgrade to persistent nagging later if it helps.
 set -uo pipefail
 
-: "${FFTF_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/fftf}"
-: "${FFTF_WINDUP_KEY:=tomorrow}"   # which winddown answer to resurface
-: "${FFTF_SOUND_ENABLED:=1}"
-: "${FFTF_WINDUP_DIALOG:=1}"       # 1 = zenity info popup (plus notify); 0 = notify only
+: "${FERN_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/ff}"
+: "${FERN_WINDUP_KEY:=tomorrow}"   # which winddown answer to resurface
+: "${FERN_SOUND_ENABLED:=1}"
+: "${FERN_WINDUP_DIALOG:=1}"       # 1 = zenity info popup (plus notify); 0 = notify only
 
 notify() { notify-send -a windup -u "${2:-normal}" "windup" "$1" 2>/dev/null || true; }
-chime()  { [ "$FFTF_SOUND_ENABLED" = 1 ] || return 0
+chime()  { [ "$FERN_SOUND_ENABLED" = 1 ] || return 0
            canberra-gtk-play -i "${1:-message}" >/dev/null 2>&1 || true; }
 
 # Print the answer following a "<!-- wd:KEY -->" marker, up to the next blank line
@@ -44,8 +44,8 @@ today="$(date +%F).md"
 
 # Most recent day file strictly before today (handles Mon -> Fri gaps, PTO, etc.).
 latest=""
-if [ -d "$FFTF_STATE_DIR" ]; then
-  latest=$(find "$FFTF_STATE_DIR" -maxdepth 1 -name '????-??-??.md' -printf '%f\n' 2>/dev/null \
+if [ -d "$FERN_STATE_DIR" ]; then
+  latest=$(find "$FERN_STATE_DIR" -maxdepth 1 -name '????-??-??.md' -printf '%f\n' 2>/dev/null \
            | awk -v t="$today" '$0 < t' | sort | tail -1)
 fi
 
@@ -55,8 +55,8 @@ if [ -z "$latest" ]; then
   exit 0
 fi
 
-answer=$(extract "$FFTF_WINDUP_KEY" "$FFTF_STATE_DIR/$latest")
-save_result=$(extract save_result "$FFTF_STATE_DIR/$latest")
+answer=$(extract "$FERN_WINDUP_KEY" "$FERN_STATE_DIR/$latest")
+save_result=$(extract save_result "$FERN_STATE_DIR/$latest")
 
 day="${latest%.md}"
 if [ -z "${answer//[[:space:]]/}" ]; then
@@ -73,7 +73,7 @@ if [ -n "${save_result//[[:space:]]/}" ]; then
 (save-progress on $day: $save_result)"
 fi
 
-if [ "$FFTF_WINDUP_DIALOG" = 1 ] && command -v zenity >/dev/null 2>&1; then
+if [ "$FERN_WINDUP_DIALOG" = 1 ] && command -v zenity >/dev/null 2>&1; then
   # Background so this one-shot service exits promptly; notify is the durable copy.
   zenity --info --title="windup" --width=480 --text="$msg" >/dev/null 2>&1 &
 fi

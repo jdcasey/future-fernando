@@ -4,7 +4,7 @@
 
 **Confirmed 2026-09-15 on the ThinkPad P1 daily driver.** Phantom pointer events
 (TrackPoint drift) reset GNOME's `GetIdletime` every 1–2 s *intermittently*, so a real
-absence often never reaches `FFTF_ACTIVITY_GAP` and no break is credited — you get nagged even
+absence often never reaches `FERN_ACTIVITY_GAP` and no break is credited — you get nagged even
 after stepping away (observed `stretch_start` frozen ~100 min with `nag_level` climbing).
 A 20 s hands-off sample showed idle pinned <3 s; later it climbed to 460 s — i.e. bursty,
 not a constant pin. The rolling detection log now records raw idle per tick to characterize
@@ -47,8 +47,8 @@ that syncs today's busy-intervals to a state file out-of-band, so the tick stays
 ## Move break detection fully off session-watching
 
 The break guard now uses **desktop presence** (GNOME/Mutter `IdleMonitor` idle time)
-as its primary signal, with the legacy typed-prompt scan (`fftf_last_human_activity`)
-kept only as a fallback under `FFTF_PRESENCE=auto` / `typed`.
+as its primary signal, with the legacy typed-prompt scan (`ff_last_human_activity`)
+kept only as a fallback under `FERN_PRESENCE=auto` / `typed`.
 
 Session-transcript watching is a poor proxy for "is the human at the keyboard": it
 misreads long autonomous agent runs and diff-reading as breaks, and background agent
@@ -61,7 +61,7 @@ drop session-watching from the break path **entirely**.
       before removing the fallback.
 - [ ] Confirm `GetIdletime` behavior across screen-lock, suspend/resume, and multiple
       seats/sessions before trusting presence as the sole signal.
-- [ ] Once the above hold, remove `fftf_last_human_activity` from the break-guard path
+- [ ] Once the above hold, remove `ff_last_human_activity` from the break-guard path
       (keep the two-stage typed-prompt scan only where it's genuinely needed).
 
 **Do NOT** remove session-watching from **answer capture** — Job A legitimately needs
@@ -115,7 +115,7 @@ tree, and it multiplies per OS.
 
 ### If someone picks this up
 
-- [ ] Factor `fftf_idle_seconds` into a selectable presence backend (mirror the LLM-backend
+- [ ] Factor `ff_idle_seconds` into a selectable presence backend (mirror the LLM-backend
       pattern) — cheap, and useful for non-GNOME **Linux** even if mac/Windows never happen.
 - [ ] Decide host strategy before porting: keep three native host shims, or move the whole
       tool onto one cross-platform runtime. Do a feasibility pass first.
@@ -123,7 +123,7 @@ tree, and it multiplies per OS.
 
 ## Validation
 
-- [x] `GetIdletime` answers from inside the `fftf.service` systemd user unit
+- [x] `GetIdletime` answers from inside the `ff.service` systemd user unit
       (verified via `systemd-run --user` — returned a live idle value; `install.sh`
       imports `DBUS_SESSION_BUS_ADDRESS` and the service already used `gdbus --session`).
 - [ ] Confirm `GetIdletime` behavior across a real screen-lock and suspend/resume cycle

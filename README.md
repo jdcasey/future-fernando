@@ -24,19 +24,19 @@ background timer does the watching; you just work.
 2. **When the break nag fires** (~60 min of continuous typing), you have two honest
    options — both reset the clock:
    - Just walk away. A real ≥10-min quiet gap credits the break on its own.
-   - Run `fftf-afk` first if the banner is blaring and you want it to hush while you get up,
-     *then* actually leave. `fftf-afk` only buys a short grace window; it does **not** count
+   - Run `ff-afk` first if the banner is blaring and you want it to hush while you get up,
+     *then* actually leave. `ff-afk` only buys a short grace window; it does **not** count
      as a break, so keeping working through it brings the nag back. (You never *have* to
-     run `fftf-afk` — walking away is enough.)
-   - If you truly can't step away yet, `fftf-pause [30m]` hushes it for a bounded window
+     run `ff-afk` — walking away is enough.)
+   - If you truly can't step away yet, `ff-pause [30m]` hushes it for a bounded window
      **without** crediting a break — the clock keeps running, so you're nagged again when
-     the pause ends. It auto-expires (capped at 2h); `fftf-unpause` ends it early.
+     the pause ends. It auto-expires (capped at 2h); `ff-unpause` ends it early.
 3. **When you get pulled away mid-thread**, do nothing. Fern notices the session
    went idle and writes a `QUESTION-*.md` into that project's `.temp/`. Come back later
    and read it to recover "what did I ask, what was the answer?" without re-reading the
    transcript.
-4. **Check in any time** with `fftf-status` to see where you are in the current
-   stretch and how long until the next reminder. `fftf-status --log` shows the rolling
+4. **Check in any time** with `ff-status` to see where you are in the current
+   stretch and how long until the next reminder. `ff-status --log` shows the rolling
    detection log — what each presence signal read on every tick — for when the guard
    behaves in a way you want to diagnose.
 
@@ -55,12 +55,12 @@ desktop reminder to take a break. It is deliberately hard to ignore, and it can'
 silenced without actually stepping away: a real ≥10-minute absence from the keyboard
 credits the break and resets the clock on its own.
 
-- `fftf-afk` hushes the nag immediately but only buys a short grace window — if you keep
+- `ff-afk` hushes the nag immediately but only buys a short grace window — if you keep
   working through it instead of leaving, the nag comes back. It does **not** count as a
   break.
-- `fftf-pause [DURATION]` is for when you genuinely *can't* break (a long meeting, an
+- `ff-pause [DURATION]` is for when you genuinely *can't* break (a long meeting, an
   incident). It silences the nag for a bounded window **without** crediting a break, so you
-  come back still owing one. It auto-expires (default 30 min, capped at 2h); `fftf-unpause`
+  come back still owing one. It auto-expires (default 30 min, capped at 2h); `ff-unpause`
   ends it early.
 
 "Continuous work" is measured from **desktop presence**, not typed prompts — watching a
@@ -101,7 +101,7 @@ stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer.
 "what to start with tomorrow" answer (a zenity popup + notification) so you begin pointed
 the right way. One-shot; it just reads the keyed marker.
 
-To avoid popups all evening on a day you walk away, winddown hard-stops `FFTF_HARD_STOP_MIN`
+To avoid popups all evening on a day you walk away, winddown hard-stops `FERN_HARD_STOP_MIN`
 minutes after it starts (default 120). Nothing is saved if it backstops mid-interview. Tuning,
 the save-progress hook, and the full config table are in
 [winddown/windup configuration](#winddownwindup-configuration).
@@ -124,14 +124,14 @@ question:
   work with no keyboard input, you can **stack** additional presence signals so a meeting
   isn't mistaken for a break: `audio-in` (your mic is live) and `audio-out` (audio is playing —
   incoming meeting audio while muted, or a recording you're reviewing). Signals compose via
-  `FFTF_PRESENCE` (e.g. `idle,audio-in,audio-out`); you're "present" if **any** enabled signal
+  `FERN_PRESENCE` (e.g. `idle,audio-in,audio-out`); you're "present" if **any** enabled signal
   says so. See [Presence signals](#presence-signals) below.
 - **Capture — a single session going stale.** Claude Code writes a transcript
   (`~/.claude/projects/<slug>/<uuid>.jsonl`) per session and bumps its mtime on every
   interaction. When one session's own mtime has been idle for a few minutes, you left it
   mid-thread; that triggers capture for that session.
 
-A `systemd` user timer runs one scan (`fftf-tick`) every ~2 minutes. No daemon, no
+A `systemd` user timer runs one scan (`ff-tick`) every ~2 minutes. No daemon, no
 polling loop, no root.
 
 ### Why presence, not typed prompts (GNOME only, for now)
@@ -145,13 +145,13 @@ can work relentlessly all day and never accumulate a continuous hour.
 The fix is to clock off **desktop presence** — seconds since real keyboard/mouse input,
 read from GNOME/Mutter's `IdleMonitor` over the session bus. Watching an agent counts as
 work; only actually leaving the keyboard credits a break. This currently requires
-**GNOME** (Wayland or X); on any other desktop `FFTF_PRESENCE=auto` falls back to the legacy
+**GNOME** (Wayland or X); on any other desktop `FERN_PRESENCE=auto` falls back to the legacy
 typed-prompt signal. A portable presence backend for other desktops is tracked in
 [`TODO.md`](TODO.md).
 
 ## Presence signals
 
-Set `FFTF_PRESENCE` to a profile name or a comma-list of signals. They **stack** — you're
+Set `FERN_PRESENCE` to a profile name or a comma-list of signals. They **stack** — you're
 present if any enabled one says so, so a live mic in a meeting holds the clock even with no
 keystrokes.
 
@@ -159,7 +159,7 @@ keystrokes.
 |-------|---------|
 | `default` | `idle,audio-in` — recommended; fixes the meeting blind-spot |
 | `minimal` | `idle` only — meeting-blind, least ambient sensing |
-| `off` | no ambient sensing at all; rely on `fftf-afk` / `fftf-pause` |
+| `off` | no ambient sensing at all; rely on `ff-afk` / `ff-pause` |
 | `auto` | back-compat: idle if available, else typed |
 | *list* | e.g. `idle,audio-in,audio-out` — compose your own |
 
@@ -169,44 +169,44 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
 `pactl` (PipeWire/PulseAudio).
 
 > **Pointer drift:** on some hardware (e.g. a ThinkPad TrackPoint) phantom pointer events
-> keep the idle counter pinned low, so a real absence never reaches `FFTF_ACTIVITY_GAP` and
+> keep the idle counter pinned low, so a real absence never reaches `FERN_ACTIVITY_GAP` and
 > breaks are never auto-credited (you get nagged even after stepping away). The fix is at
 > the OS level — reduce TrackPoint sensitivity / enable palm-and-drift rejection. Use
-> `fftf-status --log` to confirm the pattern (idle staying low across a known absence).
+> `ff-status --log` to confirm the pattern (idle staying low across a known absence).
 > If you don't use the TrackPoint at all, `cookbook/thinkpad-trackpoint-drift/` has a
 > ready fix/test/undo (disables just the nub via a udev rule).
 
 ## Break guard details
 
 - Continuous activity is measured from the enabled presence signals, ignoring absences
-  shorter than `FFTF_ACTIVITY_GAP` (10 min).
-- At `FFTF_BREAK_INTERVAL` (60 min) it fires a `critical`-urgency notification (sticky on
+  shorter than `FERN_ACTIVITY_GAP` (10 min).
+- At `FERN_BREAK_INTERVAL` (60 min) it fires a `critical`-urgency notification (sticky on
   GNOME) plus a sound, and **escalates** each unacknowledged re-fire — harsher sound, more
   repeats, updated banner text.
-- A genuine ≥`FFTF_ACTIVITY_GAP` absence (you actually stepped away, or the computer
+- A genuine ≥`FERN_ACTIVITY_GAP` absence (you actually stepped away, or the computer
   suspended/slept) is the only thing that *credits* the break and resets the clock.
-- `fftf-afk` hushes the nag now and opens a `FFTF_BREAK_GRACE` (5 min) grace window so you can
+- `ff-afk` hushes the nag now and opens a `FERN_BREAK_GRACE` (5 min) grace window so you can
   leave without the banner blaring — but it does **not** reset the clock. If no real quiet
   gap follows, the nag returns when grace expires.
-- `fftf-pause [DURATION]` is for when you **can't** step away (a meeting you can't leave, an
+- `ff-pause [DURATION]` is for when you **can't** step away (a meeting you can't leave, an
   incident). It silences the nag for the window but does **not** credit a break — the stretch
   clock keeps running, so you return overdue and get nagged as soon as it expires. It
-  auto-expires (default 30 min, capped at `FFTF_PAUSE_MAX` = 2h) so a forgotten pause can't
-  disable the guard all day; `fftf-unpause` ends it early.
+  auto-expires (default 30 min, capped at `FERN_PAUSE_MAX` = 2h) so a forgotten pause can't
+  disable the guard all day; `ff-unpause` ends it early.
 - Clicking/dismissing the banner does nothing by design (a glance-and-swat is exactly the
   failure this guards against).
 - Each nag also carries one **grounding suggestion** picked at random (breathing, 5-4-3-2-1,
   and similar), under a "leave the room / look away from the screen" lead-in — a concrete
   thing to do with the break, not just a command to take one. Edit the list at
-  `data/grounding.txt` (installed to `<data>/fftf/data/grounding.txt`) to add your own;
-  turn it off with `FFTF_GROUNDING_ENABLED=0` or point `FFTF_GROUNDING_FILE` at your own file.
+  `data/grounding.txt` (installed to `<data>/ff/data/grounding.txt`) to add your own;
+  turn it off with `FERN_GROUNDING_ENABLED=0` or point `FERN_GROUNDING_FILE` at your own file.
 
 ### Rolling detection log
 
-Every tick appends one line to `<state>/log/fftf-YYYYMMDD.log` recording what each presence
+Every tick appends one line to `<state>/log/ff-YYYYMMDD.log` recording what each presence
 signal read and the decision taken (`active`, `paused`, `grace`, `credit-break`, `nag:N`).
-It's the audit and diagnostic trail — view it with `fftf-status --log`. Daily files, retained
-`FFTF_LOG_RETAIN_DAYS` (3) days. Like everything else, it stays on your machine and records
+It's the audit and diagnostic trail — view it with `ff-status --log`. Daily files, retained
+`FERN_LOG_RETAIN_DAYS` (3) days. Like everything else, it stays on your machine and records
 only presence facts and decisions, never any content.
 
 ## Answer capture details
@@ -220,7 +220,7 @@ only presence facts and decisions, never any content.
   or automation runs (e.g. `/save-progress`) and Fern's own background LLM calls —
   aren't a "what did I ask?" and are skipped without spending a model call.
 - Output goes to each session's own `<project>/.temp/` by default (override with
-  `FFTF_CAPTURE_DIR` to funnel everything into one folder).
+  `FERN_CAPTURE_DIR` to funnel everything into one folder).
 - The raw transcript already persists everything permanently; the capture file is just the
   **findable, digested** version.
 
@@ -236,17 +236,17 @@ exfiltration**, and Fern does neither:
 - **Local only.** No presence signal leaves your machine. The tick is offline; the only
   network use is the optional `claude` capture backend (switch to `ollama` for fully
   offline capture — see below).
-- **Auditable.** `fftf-status` shows exactly which signals are enabled and what each reads;
-  `fftf-status --log` shows the full per-tick record. Nothing is hidden.
-- **Opt out at any granularity.** Disable individual signals via `FFTF_PRESENCE`, drop to
-  `minimal` (idle only), or `off` for no ambient sensing at all (then use `fftf-afk`/`fftf-pause`).
+- **Auditable.** `ff-status` shows exactly which signals are enabled and what each reads;
+  `ff-status --log` shows the full per-tick record. Nothing is hidden.
+- **Opt out at any granularity.** Disable individual signals via `FERN_PRESENCE`, drop to
+  `minimal` (idle only), or `off` for no ambient sensing at all (then use `ff-afk`/`ff-pause`).
   `audio-out` is opt-in precisely because speaker monitoring is the most surveillance-adjacent
-  signal. Answer capture is separately disableable with `FFTF_CAPTURE_ENABLED=0`.
+  signal. Answer capture is separately disableable with `FERN_CAPTURE_ENABLED=0`.
 
 ## Capture backends
 
 The distillation is the only part that uses a model, and it is pluggable via
-`FFTF_LLM_BACKEND`:
+`FERN_LLM_BACKEND`:
 
 - **`claude`** (default) — the hosted Claude Code CLI. Fast, best quality; each capture is a
   small API call, so it has a (small) cost and needs network.
@@ -255,15 +255,15 @@ The distillation is the only part that uses a model, and it is pluggable via
   lower than a hosted model; on a CPU-only box use a small model (`llama3.2:3b`, `gemma2:2b`).
   Because capture runs *after* you walk away, its latency is not in your way.
 
-Switch by setting `FFTF_LLM_BACKEND` in the config, and pick the model with `FFTF_CLAUDE_MODEL` /
-`FFTF_OLLAMA_MODEL` (or `FFTF_LLM_MODEL` to override whichever is active). The backend is a shared
-gateway (`lib/fftf-llm.sh`) that future Fern features can reuse.
+Switch by setting `FERN_LLM_BACKEND` in the config, and pick the model with `FERN_CLAUDE_MODEL` /
+`FERN_OLLAMA_MODEL` (or `FERN_LLM_MODEL` to override whichever is active). The backend is a shared
+gateway (`lib/ff-llm.sh`) that future Fern features can reuse.
 
 **Compare quality directly** on a real session before you commit to one:
 
 ```sh
-fftf-capture --compare --latest        # run BOTH backends, print side by side + timings
-fftf-capture --dry-run --backend ollama --model llama3.2:3b --latest
+ff-capture --compare --latest        # run BOTH backends, print side by side + timings
+ff-capture --dry-run --backend ollama --model llama3.2:3b --latest
 ```
 
 ### Using the local (ollama) backend
@@ -282,47 +282,47 @@ ollama pull llama3.2:3b
 # 4. point Fern at it (see next code block)
 ```
 
-Then set these in `~/.config/fftf/fftf.conf`:
+Then set these in `~/.config/ff/ff.conf`:
 
 ```sh
-FFTF_LLM_BACKEND="ollama"     # switch capture from hosted claude to the local model
-FFTF_CAPTURE_TIMEOUT=180      # per-capture budget. A 3B model on CPU distills a typical
+FERN_LLM_BACKEND="ollama"     # switch capture from hosted claude to the local model
+FERN_CAPTURE_TIMEOUT=180      # per-capture budget. A 3B model on CPU distills a typical
                             # session in 20-55s; a rare max-length answer can approach
                             # ~140s. 180 leaves headroom. (On a GPU host, seconds.)
-FFTF_CAPTURE_PER_TICK=1       # only one slow local capture per tick, so two can't blow
+FERN_CAPTURE_PER_TICK=1       # only one slow local capture per tick, so two can't blow
                             # the service's 300s TimeoutStartSec
 ```
 
-`FFTF_LLM_BACKEND` and `FFTF_CAPTURE_TIMEOUT` are the two that matter most for local use:
+`FERN_LLM_BACKEND` and `FERN_CAPTURE_TIMEOUT` are the two that matter most for local use:
 the first does the switch, the second keeps slow-but-valid captures from being killed
-mid-generation. To change models, set `FFTF_OLLAMA_MODEL` (e.g. `llama3.1:8b`).
+mid-generation. To change models, set `FERN_OLLAMA_MODEL` (e.g. `llama3.1:8b`).
 
 ## winddown/windup configuration
 
-Set these for the timers in `~/.config/fftf/fftf-winddown.env` (`KEY=value`, one per line,
+Set these for the timers in `~/.config/ff/ff-winddown.env` (`KEY=value`, one per line,
 no shell quoting; read by both units):
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `FFTF_START` | `15:15` | Clock time the sequence anchors to |
-| `FFTF_INTERVAL_MIN` | `10` | Minutes between question slots |
-| `FFTF_NAG_SEC` | `120` | Re-show the popup this often until answered |
-| `FFTF_HARD_STOP_MIN` | `120` | Safety backstop after start |
-| `FFTF_SOUND_ENABLED` | `1` | Play chimes |
-| `FFTF_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook; run with `FFTF_ANSWERS_FILE` exported |
-| `FFTF_GOODNIGHT_CMD` | *(empty)* | Step-5 hook; empty = one-shot "good evening" notify |
-| `FFTF_WINDUP_KEY` | `tomorrow` | Which winddown answer windup resurfaces |
-| `FFTF_WINDUP_DIALOG` | `1` | windup shows a zenity popup (plus notification) |
+| `FERN_START` | `15:15` | Clock time the sequence anchors to |
+| `FERN_INTERVAL_MIN` | `10` | Minutes between question slots |
+| `FERN_NAG_SEC` | `120` | Re-show the popup this often until answered |
+| `FERN_HARD_STOP_MIN` | `120` | Safety backstop after start |
+| `FERN_SOUND_ENABLED` | `1` | Play chimes |
+| `FERN_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook; run with `FERN_ANSWERS_FILE` exported |
+| `FERN_GOODNIGHT_CMD` | *(empty)* | Step-5 hook; empty = one-shot "good evening" notify |
+| `FERN_WINDUP_KEY` | `tomorrow` | Which winddown answer windup resurfaces |
+| `FERN_WINDUP_DIALOG` | `1` | windup shows a zenity popup (plus notification) |
 
-Test the flow immediately (no waiting for 3:15): `FFTF_INTERVAL_MIN=1 FFTF_NAG_SEC=20 fftf-winddown --now`.
+Test the flow immediately (no waiting for 3:15): `FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-winddown --now`.
 
 ### save-progress hook
 
-The save step is pluggable via `FFTF_SAVE_PROGRESS_CMD`. `install.sh` installs a starter hook
-to `~/.local/bin/fftf-save-progress-hook` (source: [`contrib/save-progress-hook.sh`](contrib/save-progress-hook.sh))
+The save step is pluggable via `FERN_SAVE_PROGRESS_CMD`. `install.sh` installs a starter hook
+to `~/.local/bin/ff-save-progress-hook` (source: [`contrib/save-progress-hook.sh`](contrib/save-progress-hook.sh))
 that runs a Claude Code skill headlessly with the interview answers as context; point
-`FFTF_SAVE_PROGRESS_CMD` at it. Two gotchas for systemd runs: wrap it in `timeout` (the
-interview backstop doesn't cover the save step), and set `FFTF_CLAUDE_BIN` to the absolute
+`FERN_SAVE_PROGRESS_CMD` at it. Two gotchas for systemd runs: wrap it in `timeout` (the
+interview backstop doesn't cover the save step), and set `FERN_CLAUDE_BIN` to the absolute
 `claude` path (user services don't inherit your PATH). Test by hand before trusting it to
 the timer.
 
@@ -332,23 +332,23 @@ path) in the day file, a `critical` notification on failure that evening, and wi
 surfaces the previous day's result each morning — so a headless run you can't watch live is
 reviewable after the fact.
 
-The `FFTF_GOODNIGHT_CMD` seam (step 5) is where a presence-aware persistent clock-off nag
+The `FERN_GOODNIGHT_CMD` seam (step 5) is where a presence-aware persistent clock-off nag
 would compose in; unset, step 5 is a single notification.
 
 ## Command reference
 
-All commands install to `~/.local/bin`. `fftf-tick` is run by the timer; the rest are for you.
+All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest are for you.
 
 | Command | What it does |
 |---------|--------------|
-| `fftf-status [--log [N]]` | Snapshot of the current stretch, presence signals, and capture backend. `--log` tails today's detection log (default 40 lines). |
-| `fftf-afk` | "Stepping away now" — hush the nag and open a short grace window. Does **not** credit a break. |
-| `fftf-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
-| `fftf-unpause` | End an active pause early. |
-| `fftf-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
-| `fftf-winddown [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FFTF_START`. |
-| `fftf-windup` | Resurface the previous working day's "start with" note. |
-| `fftf-tick` | **Internal** — one scan pass (break guard + capture). Run by `fftf.timer` every ~2 min. |
+| `ff-status [--log [N]]` | Snapshot of the current stretch, presence signals, and capture backend. `--log` tails today's detection log (default 40 lines). |
+| `ff-afk` | "Stepping away now" — hush the nag and open a short grace window. Does **not** credit a break. |
+| `ff-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
+| `ff-unpause` | End an active pause early. |
+| `ff-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
+| `ff-winddown [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FERN_START`. |
+| `ff-windup` | Resurface the previous working day's "start with" note. |
+| `ff-tick` | **Internal** — one scan pass (break guard + capture). Run by `ff.timer` every ~2 min. |
 
 ---
 
@@ -374,31 +374,31 @@ All commands install to `~/.local/bin`. `fftf-tick` is run by the timer; the res
 ```
 
 It installs the scripts to `~/.local/bin`, the units to `~/.config/systemd/user`, writes a
-config to `~/.config/fftf/fftf.conf`, seeds a capture baseline (so your existing
+config to `~/.config/ff/ff.conf`, seeds a capture baseline (so your existing
 sessions are **not** back-captured), and enables the timers (break-guard tick plus the
 winddown/windup day-shape bookends).
 
-Make sure `~/.local/bin` is on your `PATH` so `fftf-afk` works from any terminal.
+Make sure `~/.local/bin` is on your `PATH` so `ff-afk` works from any terminal.
 
 ## Usage
 
 ```sh
-fftf-status                                 # where am I in the current stretch?
-fftf-status --log                           # rolling detection log (diagnose the guard)
-fftf-afk                                     # I'm stepping away — hush the nag now
-fftf-pause 30m                               # I can't break yet — hush without crediting one
-fftf-unpause                                 # end a pause early
-fftf-capture --compare --latest             # try capture backends on a real session
-systemctl --user start fftf.service # run one scan right now
-journalctl --user -u fftf.service   # service logs
+ff-status                                 # where am I in the current stretch?
+ff-status --log                           # rolling detection log (diagnose the guard)
+ff-afk                                     # I'm stepping away — hush the nag now
+ff-pause 30m                               # I can't break yet — hush without crediting one
+ff-unpause                                 # end a pause early
+ff-capture --compare --latest             # try capture backends on a real session
+systemctl --user start ff.service # run one scan right now
+journalctl --user -u ff.service   # service logs
 ```
 
 ## Configuration
 
-Edit `~/.config/fftf/fftf.conf`. Every knob (timings, enable/disable each
+Edit `~/.config/ff/ff.conf`. Every knob (timings, enable/disable each
 feature, capture model, notification stacking, output location) is documented in
-[`config/fftf.conf.example`](config/fftf.conf.example). The winddown/windup timers read a
-separate `~/.config/fftf/fftf-winddown.env` — see
+[`config/ff.conf.example`](config/ff.conf.example). The winddown/windup timers read a
+separate `~/.config/ff/ff-winddown.env` — see
 [winddown/windup configuration](#winddownwindup-configuration).
 
 ## Uninstall
@@ -411,9 +411,9 @@ separate `~/.config/fftf/fftf-winddown.env` — see
 ## Caveats
 
 - **Privacy:** capture files distill session content into `<project>/.temp/`. Keep `.temp/`
-  in your `.gitignore` and treat those files as you would the session itself, or else set `FFTF_CAPTURE_DIR`.
+  in your `.gitignore` and treat those files as you would the session itself, or else set `FERN_CAPTURE_DIR`.
 - **Cost:** each capture is a small headless model call. It's rate-limited
-  (`FFTF_CAPTURE_PER_TICK`) and deduplicated, but it is not free.
+  (`FERN_CAPTURE_PER_TICK`) and deduplicated, but it is not free.
 - **Desktop-bound:** notifications need the graphical session's D-Bus. Sessions run over
   SSH or in containers on another filesystem won't be seen.
 - Capture quality depends on the model reading a truncated transcript tail; walking away

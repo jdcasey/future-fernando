@@ -20,11 +20,11 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BIN_DIR="$HOME/.local/bin"
-LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fftf/data"
+LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ff/lib"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ff/data"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fftf"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fftf"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ff"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ff"
 PROJECTS_DIR="$HOME/.claude/projects"
 
 echo "==> Checking dependencies"
@@ -72,6 +72,39 @@ rm -f "$BIN_DIR/focusguard-tick" "$BIN_DIR/focusguard-capture" \
       "$BIN_DIR/focusguard-status" "$BIN_DIR/afk" \
       "$BIN_DIR/break-start" "$BIN_DIR/break-done"
 
+# Retire the fftf-* prefix layout (the immediately prior naming) so the ff-*
+# rename doesn't leave stale duplicates running or on the PATH. Config and state
+# migrate separately (see below); only units, scripts, and libs are removed here.
+echo "==> Retiring fftf-* units and scripts (if present)"
+systemctl --user disable --now fftf.timer fftf-winddown.timer fftf-windup.timer 2>/dev/null || true
+rm -f "$UNIT_DIR/fftf.service" "$UNIT_DIR/fftf.timer" \
+      "$UNIT_DIR/fftf-winddown.service" "$UNIT_DIR/fftf-winddown.timer" \
+      "$UNIT_DIR/fftf-windup.service" "$UNIT_DIR/fftf-windup.timer"
+rm -f "$BIN_DIR/fftf-tick" "$BIN_DIR/fftf-capture" "$BIN_DIR/fftf-afk" \
+      "$BIN_DIR/fftf-status" "$BIN_DIR/fftf-pause" "$BIN_DIR/fftf-unpause" \
+      "$BIN_DIR/fftf-winddown" "$BIN_DIR/fftf-windup" "$BIN_DIR/fftf-save-progress-hook"
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/fftf"
+
+# One-time config/state migration from the fftf-* layout to ff-*. Preserves the
+# user's settings and capture baseline; rewrites FFTF_ vars to FERN_ in the config.
+OLD_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fftf"
+OLD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fftf"
+if [ -f "$OLD_CONF_DIR/fftf.conf" ] && [ ! -f "$CONF_DIR/ff.conf" ]; then
+  echo "==> Migrating config $OLD_CONF_DIR/fftf.conf -> $CONF_DIR/ff.conf"
+  mkdir -p "$CONF_DIR"
+  sed 's/FFTF_/FERN_/g; s/fftf/ff/g' "$OLD_CONF_DIR/fftf.conf" > "$CONF_DIR/ff.conf"
+fi
+if [ -f "$OLD_CONF_DIR/fftf-winddown.env" ] && [ ! -f "$CONF_DIR/ff-winddown.env" ]; then
+  echo "==> Migrating $OLD_CONF_DIR/fftf-winddown.env -> $CONF_DIR/ff-winddown.env"
+  mkdir -p "$CONF_DIR"
+  sed 's/FFTF_/FERN_/g; s/fftf/ff/g' "$OLD_CONF_DIR/fftf-winddown.env" > "$CONF_DIR/ff-winddown.env"
+fi
+rm -rf "$OLD_CONF_DIR"
+if [ -d "$OLD_STATE_DIR" ] && [ ! -d "$STATE_DIR" ]; then
+  echo "==> Migrating state $OLD_STATE_DIR -> $STATE_DIR"
+  mv "$OLD_STATE_DIR" "$STATE_DIR"
+fi
+
 echo "==> Installing libs to $LIB_DIR"
 mkdir -p "$LIB_DIR"
 install -m 0644 "$here"/lib/*.sh "$LIB_DIR/"
@@ -82,34 +115,34 @@ install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt"
 
 echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
-for cmd in fftf-tick fftf-capture fftf-afk fftf-status fftf-pause fftf-unpause fftf-winddown fftf-windup; do
+for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-winddown ff-windup; do
   install -m 0755 "$here/bin/$cmd" "$BIN_DIR/$cmd"
 done
 # Example winddown save-progress hook, installed to a space-free path so it's easy
-# to reference from fftf-winddown.env (point FFTF_SAVE_PROGRESS_CMD at it).
-install -m 0755 "$here/contrib/save-progress-hook.sh" "$BIN_DIR/fftf-save-progress-hook"
+# to reference from ff-winddown.env (point FERN_SAVE_PROGRESS_CMD at it).
+install -m 0755 "$here/contrib/save-progress-hook.sh" "$BIN_DIR/ff-save-progress-hook"
 
 echo "==> Installing systemd user units to $UNIT_DIR"
 mkdir -p "$UNIT_DIR"
-for u in fftf.service fftf.timer \
-         fftf-winddown.service fftf-winddown.timer fftf-windup.service fftf-windup.timer; do
+for u in ff.service ff.timer \
+         ff-winddown.service ff-winddown.timer ff-windup.service ff-windup.timer; do
   install -m 0644 "$here/systemd/$u" "$UNIT_DIR/$u"
 done
 
 echo "==> Config"
 mkdir -p "$CONF_DIR"
-if [ -f "$CONF_DIR/fftf.conf" ]; then
-  echo "    keeping existing $CONF_DIR/fftf.conf"
+if [ -f "$CONF_DIR/ff.conf" ]; then
+  echo "    keeping existing $CONF_DIR/ff.conf"
 else
-  install -m 0644 "$here/config/fftf.conf.example" "$CONF_DIR/fftf.conf"
+  install -m 0644 "$here/config/ff.conf.example" "$CONF_DIR/ff.conf"
   # Bake in the resolved claude path so the systemd env doesn't have to find it.
-  [ -n "$claude_bin" ] && printf '\nFFTF_CLAUDE_BIN="%s"\n' "$claude_bin" >> "$CONF_DIR/fftf.conf"
+  [ -n "$claude_bin" ] && printf '\nFERN_CLAUDE_BIN="%s"\n' "$claude_bin" >> "$CONF_DIR/ff.conf"
   # If claude is absent but ollama is present, default to the local backend.
   if [ -z "$claude_bin" ] && command -v ollama >/dev/null 2>&1; then
-    printf 'FFTF_LLM_BACKEND="ollama"\n' >> "$CONF_DIR/fftf.conf"
+    printf 'FERN_LLM_BACKEND="ollama"\n' >> "$CONF_DIR/ff.conf"
     echo "    (no claude found -> defaulting capture backend to ollama)"
   fi
-  echo "    wrote $CONF_DIR/fftf.conf"
+  echo "    wrote $CONF_DIR/ff.conf"
 fi
 
 echo "==> Seeding capture baseline (existing sessions won't be back-captured)"
@@ -126,16 +159,16 @@ echo "==> Enabling timers"
 systemctl --user daemon-reload
 # Make the desktop session env (dbus/wayland) available to the services.
 systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
-systemctl --user enable --now fftf.timer fftf-winddown.timer fftf-windup.timer
+systemctl --user enable --now ff.timer ff-winddown.timer ff-windup.timer
 
 echo
 echo "Installed. Timers:"
-systemctl --user list-timers fftf.timer fftf-winddown.timer fftf-windup.timer --no-pager 2>/dev/null | sed -n '1,4p' || true
+systemctl --user list-timers ff.timer ff-winddown.timer ff-windup.timer --no-pager 2>/dev/null | sed -n '1,4p' || true
 echo
-echo "Make sure $BIN_DIR is on your PATH so 'fftf-afk' works everywhere."
-echo "Check state any time with:  fftf-status       (add --log to see detections)"
-echo "Step away / can't break:    fftf-afk  /  fftf-pause"
-echo "Test a scan now with:       systemctl --user start fftf.service"
-echo "Try/compare capture with:   fftf-capture --compare --latest"
-echo "Test winddown now (fast):   FFTF_INTERVAL_MIN=1 FFTF_NAG_SEC=20 fftf-winddown --now"
+echo "Make sure $BIN_DIR is on your PATH so 'ff-afk' works everywhere."
+echo "Check state any time with:  ff-status       (add --log to see detections)"
+echo "Step away / can't break:    ff-afk  /  ff-pause"
+echo "Test a scan now with:       systemctl --user start ff.service"
+echo "Try/compare capture with:   ff-capture --compare --latest"
+echo "Test winddown now (fast):   FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-winddown --now"
 echo "To wire save-progress, see: contrib/save-progress-hook.sh + docs/winddown-design.md"

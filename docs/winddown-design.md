@@ -1,7 +1,7 @@
 # winddown — end-of-day extraction sequence
 
 **Status: design draft, folded into Fern.** Now lives in the Fern repo
-(shared install/uninstall, one README). Command/config naming (`wd-*` vs `fftf-*`) and
+(shared install/uninstall, one README). Command/config naming (`wd-*` vs `ff-*`) and
 shared helpers are still to be unified — deferred to the planned project rename.
 
 ## Goal
@@ -45,17 +45,17 @@ interview stages require a typed response and **nag every 2 min until I answer**
 - [x] Response mechanism: **zenity popup** (free-text; re-shows as the nag).
 - [x] Early-answer pacing: **hold the 10-min rhythm** (don't advance before a slot).
 - [x] No-reply: **keep nagging until answered** — plus a hard backstop
-      (`FFTF_HARD_STOP_MIN`, default 180) so a walked-away day doesn't pop dialogs
+      (`FERN_HARD_STOP_MIN`, default 180) so a walked-away day doesn't pop dialogs
       all evening. NB: hold-rhythm + keep-nagging means the schedule can slip past
       4pm if answers are slow; accepted.
 - [x] ~~Standalone project~~ **Folded into Fern** (2026-09-16); no shared *code*
-      yet (own notify/chime helpers, own `FFTF_*` config) — that unification is deferred.
+      yet (own notify/chime helpers, own `FERN_*` config) — that unification is deferred.
 - [x] "Check your calendar" is a *reminder*, not a calendar integration.
 - [x] Language: **bash** for now (Python still open; more of a candidate here).
 
 ## save-progress step (step 4)
 
-- [x] **Pluggable** via `FFTF_SAVE_PROGRESS_CMD` (run with `FFTF_ANSWERS_FILE`
+- [x] **Pluggable** via `FERN_SAVE_PROGRESS_CMD` (run with `FERN_ANSWERS_FILE`
       exported) — keeps the tool reusable; each user wires their own.
 - [x] **My case:** run the `team-awareness:save-progress` skill headlessly via
       `claude`, cwd = the personal-notes project dir (so `.temp`/MCP resolve),
@@ -79,8 +79,8 @@ interview stages require a typed response and **nag every 2 min until I answer**
 ## Good-evening (step 5) — composition
 
 Decision pending, but the plan: keep the "have a good evening" as a **pluggable
-hook** (`FFTF_GOODNIGHT_CMD`, already wired; default = one-shot notify). The
-recommended composition is a NEW Fern feature (`fftf-goodnight`) that provides
+hook** (`FERN_GOODNIGHT_CMD`, already wired; default = one-shot notify). The
+recommended composition is a NEW Fern feature (`ff-goodnight`) that provides
 a **presence-aware, escalating, sticky clock-off nag** — because Fern already
 owns presence detection + escalation + acknowledgment, and a "you should be logged
 off" nag is the inverse of its break nag, and it should STOP once you actually

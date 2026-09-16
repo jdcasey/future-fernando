@@ -13,30 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# fftf-tick — one scan pass, run every ~2 min by a systemd user timer.
-#   Job A  answer capture (see lib/fftf-capture.sh)
+# ff-tick — one scan pass, run every ~2 min by a systemd user timer.
+#   Job A  answer capture (see lib/ff-capture.sh)
 #   Job B  break guard (below)
 
 set -uo pipefail
 
 # ---- load libs --------------------------------------------------------------
 _self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-for _d in "${FFTF_LIB:-}" \
-          "${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib" \
+for _d in "${FERN_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/ff/lib" \
           "$(dirname "$_self")/../lib"; do
-  if [ -n "$_d" ] && [ -f "$_d/fftf-common.sh" ]; then FFTF_LIB="$_d"; break; fi
+  if [ -n "$_d" ] && [ -f "$_d/ff-common.sh" ]; then FERN_LIB="$_d"; break; fi
 done
-[ -n "${FFTF_LIB:-}" ] && [ -f "$FFTF_LIB/fftf-common.sh" ] || {
-  echo "fftf-tick: cannot find libs (set FFTF_LIB)" >&2; exit 1; }
+[ -n "${FERN_LIB:-}" ] && [ -f "$FERN_LIB/ff-common.sh" ] || {
+  echo "ff-tick: cannot find libs (set FERN_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
-. "$FFTF_LIB/fftf-common.sh"
+. "$FERN_LIB/ff-common.sh"
 # shellcheck source=/dev/null
-. "$FFTF_LIB/fftf-llm.sh"
+. "$FERN_LIB/ff-llm.sh"
 # shellcheck source=/dev/null
-. "$FFTF_LIB/fftf-capture.sh"
+. "$FERN_LIB/ff-capture.sh"
 
 # ---- single-instance lock ---------------------------------------------------
-exec 9>"$FFTF_STATE_DIR/.lock"
+exec 9>"$FERN_STATE_DIR/.lock"
 flock -n 9 || exit 0
 
 now=$(date +%s)
@@ -44,58 +44,58 @@ now=$(date +%s)
 # Break-guard clock is driven by DESKTOP PRESENCE (stackable signals), not typed
 # prompts or file mtimes: reading a diff or watching an agent run counts as work,
 # and only real physical absence credits a break. `away` = seconds since ANY
-# enabled signal last said you were present. See fftf_break_away_seconds /
-# FFTF_PRESENCE in fftf-common.sh.
-away=$(fftf_break_away_seconds)
+# enabled signal last said you were present. See ff_break_away_seconds /
+# FERN_PRESENCE in ff-common.sh.
+away=$(ff_break_away_seconds)
 
 # Raw sensor snapshot for the rolling detection log (independent of which signals
 # are enabled, so the log can reveal e.g. an idle counter pinned low by pointer
 # drift). Cheap; existence/idle only, never content.
-log_idle=$(fftf_idle_seconds 2>/dev/null || echo -)
-log_mic=0; fftf_audio_in_active  && log_mic=1
-log_spk=0; fftf_audio_out_active && log_spk=1
+log_idle=$(ff_idle_seconds 2>/dev/null || echo -)
+log_mic=0; ff_audio_in_active  && log_mic=1
+log_spk=0; ff_audio_out_active && log_spk=1
 
 # =============================================================================
 # Job B — break guard
 # =============================================================================
 close_notification() {
   local id
-  id=$(cat "$FFTF_STATE_DIR/notif_id" 2>/dev/null || true)
+  id=$(cat "$FERN_STATE_DIR/notif_id" 2>/dev/null || true)
   if [ -n "${id:-}" ] && [ "$id" != 0 ]; then
     gdbus call --session --dest org.freedesktop.Notifications \
       --object-path /org/freedesktop/Notifications \
       --method org.freedesktop.Notifications.CloseNotification "$id" \
       >/dev/null 2>&1 || true
   fi
-  rm -f "$FFTF_STATE_DIR/notif_id"
+  rm -f "$FERN_STATE_DIR/notif_id"
 }
 
 fire_nag() {
   local level="$1" active="$2"
-  local mins=$(( active / 60 )) over=$(( (active - FFTF_BREAK_INTERVAL) / 60 ))
+  local mins=$(( active / 60 )) over=$(( (active - FERN_BREAK_INTERVAL) / 60 ))
   local title body
   title="Take a break (nag #$level)"
-  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: fftf-afk (or fftf-pause if you can't)"
+  body="Active $mins min — overdue by $over min."$'\n'"Step away, then run: ff-afk (or ff-pause if you can't)"
 
   # Attach a randomly-chosen grounding practice. Lead with leaving the room / the
   # screen — the practice only helps once you're actually away from the work.
   local ground
-  ground=$(fftf_grounding_suggestion) || ground=""
+  ground=$(ff_grounding_suggestion) || ground=""
   if [ -n "$ground" ]; then
     body+=$'\n\n'"Leave the room / look away from the screen, then try:"$'\n'"• $ground"
   fi
 
   local args=(-u critical -a Fern -t 0)
-  if [ "$FFTF_NOTIFY_STACK" != 1 ]; then
+  if [ "$FERN_NOTIFY_STACK" != 1 ]; then
     local id
-    id=$(cat "$FFTF_STATE_DIR/notif_id" 2>/dev/null || true)
+    id=$(cat "$FERN_STATE_DIR/notif_id" 2>/dev/null || true)
     [ -n "${id:-}" ] && [ "$id" != 0 ] && args+=(-r "$id")
   fi
   local newid
   newid=$(notify-send "${args[@]}" -p "$title" "$body" 2>/dev/null || true)
-  [ -n "$newid" ] && printf '%s\n' "$newid" > "$FFTF_STATE_DIR/notif_id"
+  [ -n "$newid" ] && printf '%s\n' "$newid" > "$FERN_STATE_DIR/notif_id"
 
-  if [ "$FFTF_SOUND_ENABLED" = 1 ]; then
+  if [ "$FERN_SOUND_ENABLED" = 1 ]; then
     local sounds=(dialog-information dialog-warning dialog-warning dialog-error bell)
     local idx=$(( level - 1 ))
     [ "$idx" -ge "${#sounds[@]}" ] && idx=$(( ${#sounds[@]} - 1 ))
@@ -108,41 +108,41 @@ fire_nag() {
 
 decision=disabled
 active=0
-if [ "$FFTF_BREAK_ENABLED" = 1 ]; then
-  grace_until=$(cat "$FFTF_STATE_DIR/grace_until" 2>/dev/null || echo 0)
-  pause_until=$(cat "$FFTF_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+if [ "$FERN_BREAK_ENABLED" = 1 ]; then
+  grace_until=$(cat "$FERN_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+  pause_until=$(cat "$FERN_STATE_DIR/pause_until" 2>/dev/null || echo 0)
 
-  if [ "$away" -ge "$FFTF_ACTIVITY_GAP" ]; then
+  if [ "$away" -ge "$FERN_ACTIVITY_GAP" ]; then
     # Real absence: the break is credited. This is the ONLY thing that resets the
-    # clock — whether you walked away on your own or after `fftf-afk`. A genuine gap
+    # clock — whether you walked away on your own or after `ff-afk`. A genuine gap
     # also clears any pause, since you actually rested.
-    rm -f "$FFTF_STATE_DIR/stretch_start" "$FFTF_STATE_DIR/nag_level" \
-          "$FFTF_STATE_DIR/break_pending" "$FFTF_STATE_DIR/grace_until" \
-          "$FFTF_STATE_DIR/pause_until"
+    rm -f "$FERN_STATE_DIR/stretch_start" "$FERN_STATE_DIR/nag_level" \
+          "$FERN_STATE_DIR/break_pending" "$FERN_STATE_DIR/grace_until" \
+          "$FERN_STATE_DIR/pause_until"
     close_notification
     decision=credit-break
   elif [ "$now" -lt "$pause_until" ]; then
-    # `fftf-pause`: you CAN'T break right now. Silence the nag, but do NOT reset the
+    # `ff-pause`: you CAN'T break right now. Silence the nag, but do NOT reset the
     # stretch clock or credit a break — pausing the nag is not pausing the need,
     # so you come back overdue and get nagged the moment the pause expires.
     close_notification
     decision=paused
   elif [ "$now" -lt "$grace_until" ]; then
-    # `fftf-afk` grace window: stay quiet, but don't credit the break or
+    # `ff-afk` grace window: stay quiet, but don't credit the break or
     # reset the stretch clock — you haven't actually stepped away yet.
     close_notification
     decision=grace
   else
-    rm -f "$FFTF_STATE_DIR/grace_until"   # grace expired without a real break
-    start=$(cat "$FFTF_STATE_DIR/stretch_start" 2>/dev/null || true)
+    rm -f "$FERN_STATE_DIR/grace_until"   # grace expired without a real break
+    start=$(cat "$FERN_STATE_DIR/stretch_start" 2>/dev/null || true)
     # New stretch: seed from now (when you returned to the keyboard), not from an
     # earlier prompt — presence-based accounting counts from when you got back.
-    if [ -z "${start:-}" ]; then start="$now"; printf '%s\n' "$start" > "$FFTF_STATE_DIR/stretch_start"; fi
+    if [ -z "${start:-}" ]; then start="$now"; printf '%s\n' "$start" > "$FERN_STATE_DIR/stretch_start"; fi
     active=$(( now - start ))
-    if [ "$active" -ge "$FFTF_BREAK_INTERVAL" ]; then
-      touch "$FFTF_STATE_DIR/break_pending"
-      level=$(( $(cat "$FFTF_STATE_DIR/nag_level" 2>/dev/null || echo 0) + 1 ))
-      printf '%s\n' "$level" > "$FFTF_STATE_DIR/nag_level"
+    if [ "$active" -ge "$FERN_BREAK_INTERVAL" ]; then
+      touch "$FERN_STATE_DIR/break_pending"
+      level=$(( $(cat "$FERN_STATE_DIR/nag_level" 2>/dev/null || echo 0) + 1 ))
+      printf '%s\n' "$level" > "$FERN_STATE_DIR/nag_level"
       fire_nag "$level" "$active"
       decision="nag:$level"
     else
@@ -153,39 +153,39 @@ fi
 
 # Rolling detection log: one line per tick so break-guard behavior (and wrong
 # assumptions, e.g. pointer drift pinning idle) can be diagnosed after the fact.
-pause_until=$(cat "$FFTF_STATE_DIR/pause_until" 2>/dev/null || echo 0)
-grace_until=$(cat "$FFTF_STATE_DIR/grace_until" 2>/dev/null || echo 0)
-log_nag=$(cat "$FFTF_STATE_DIR/nag_level" 2>/dev/null || echo 0)
+pause_until=$(cat "$FERN_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+grace_until=$(cat "$FERN_STATE_DIR/grace_until" 2>/dev/null || echo 0)
+log_nag=$(cat "$FERN_STATE_DIR/nag_level" 2>/dev/null || echo 0)
 log_pleft=0; [ "$now" -lt "$pause_until" ] && log_pleft=$(( pause_until - now ))
 log_gleft=0; [ "$now" -lt "$grace_until" ] && log_gleft=$(( grace_until - now ))
-fftf_log_detection "idle=${log_idle} mic=${log_mic} spk=${log_spk} away=${away}" \
+ff_log_detection "idle=${log_idle} mic=${log_mic} spk=${log_spk} away=${away}" \
                  "active=${active} nag=${log_nag} pause=${log_pleft} grace=${log_gleft}" \
-                 "presence=${FFTF_PRESENCE} decision=${decision}"
+                 "presence=${FERN_PRESENCE} decision=${decision}"
 
 # =============================================================================
 # Job A — answer capture (walked-away sessions)
 # =============================================================================
-if [ "$FFTF_CAPTURE_ENABLED" = 1 ]; then
+if [ "$FERN_CAPTURE_ENABLED" = 1 ]; then
   count=0
   while read -r m file; do
-    [ "$count" -ge "$FFTF_CAPTURE_PER_TICK" ] && break
+    [ "$count" -ge "$FERN_CAPTURE_PER_TICK" ] && break
     m=${m%.*}
     sgap=$(( now - m ))
-    [ "$sgap" -lt "$FFTF_CAPTURE_IDLE" ] && continue     # still active
-    [ "$sgap" -gt "$FFTF_CAPTURE_MAX_AGE" ] && continue  # too stale
-    grep -ql "$FFTF_SENTINEL" "$file" 2>/dev/null && continue  # our own capture call
+    [ "$sgap" -lt "$FERN_CAPTURE_IDLE" ] && continue     # still active
+    [ "$sgap" -gt "$FERN_CAPTURE_MAX_AGE" ] && continue  # too stale
+    grep -ql "$FERN_SENTINEL" "$file" 2>/dev/null && continue  # our own capture call
 
     sid=$(basename "$file" .jsonl)
-    marker="$FFTF_STATE_DIR/captured/$sid"
+    marker="$FERN_STATE_DIR/captured/$sid"
     last=$(cat "$marker" 2>/dev/null || echo 0)
     [ "$m" -le "$last" ] && continue                   # already captured this content
 
-    fftf_capture_session "$file"; rc=$?
+    ff_capture_session "$file"; rc=$?
     if [ "$rc" -ne 1 ]; then                           # 0 wrote / 2 skip -> mark done
       printf '%s\n' "$m" > "$marker"
       [ "$rc" -eq 0 ] && count=$(( count + 1 ))
     fi                                                 # rc==1 error -> retry next tick
-  done < <(find "$FFTF_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
+  done < <(find "$FERN_PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' \
              -printf '%T@ %p\n' 2>/dev/null | sort -rn)
 fi
 

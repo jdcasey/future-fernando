@@ -13,25 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# fftf-unpause — end an active fftf-pause early. The break clock kept running while
+# ff-unpause — end an active ff-pause early. The break clock kept running while
 # paused, so if you're already overdue the nag returns on the next tick.
 
 set -uo pipefail
 
 _self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-for _d in "${FFTF_LIB:-}" \
-          "${XDG_DATA_HOME:-$HOME/.local/share}/fftf/lib" \
+for _d in "${FERN_LIB:-}" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/ff/lib" \
           "$(dirname "$_self")/../lib"; do
-  if [ -n "$_d" ] && [ -f "$_d/fftf-common.sh" ]; then FFTF_LIB="$_d"; break; fi
+  if [ -n "$_d" ] && [ -f "$_d/ff-common.sh" ]; then FERN_LIB="$_d"; break; fi
 done
-[ -n "${FFTF_LIB:-}" ] && [ -f "$FFTF_LIB/fftf-common.sh" ] || {
-  echo "fftf-unpause: cannot find libs (set FFTF_LIB)" >&2; exit 1; }
+[ -n "${FERN_LIB:-}" ] && [ -f "$FERN_LIB/ff-common.sh" ] || {
+  echo "ff-unpause: cannot find libs (set FERN_LIB)" >&2; exit 1; }
 # shellcheck source=/dev/null
-. "$FFTF_LIB/fftf-common.sh"
+. "$FERN_LIB/ff-common.sh"
 
 now=$(date +%s)
-pause_until=$(cat "$FFTF_STATE_DIR/pause_until" 2>/dev/null || echo 0)
-rm -f "$FFTF_STATE_DIR/pause_until"
+pause_until=$(cat "$FERN_STATE_DIR/pause_until" 2>/dev/null || echo 0)
+rm -f "$FERN_STATE_DIR/pause_until"
 
 if [ "$now" -lt "$pause_until" ]; then
   echo "Pause ended. If you're past the break interval, the nag returns shortly."

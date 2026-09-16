@@ -19,23 +19,32 @@
 set -euo pipefail
 
 BIN_DIR="$HOME/.local/bin"
-LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fftf"
+LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ff"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fftf"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fftf"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ff"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ff"
 
 echo "==> Disabling timers"
+systemctl --user disable --now ff.timer ff-winddown.timer ff-windup.timer 2>/dev/null || true
+# the fftf-* prefix layout and pre-Fern timers, in case an old install is still around
 systemctl --user disable --now fftf.timer fftf-winddown.timer fftf-windup.timer 2>/dev/null || true
-# pre-Fern timers, in case an old install is still around
 systemctl --user disable --now focusguard.timer winddown.timer windup.timer 2>/dev/null || true
 
 echo "==> Removing units, scripts, and libs"
-rm -f "$UNIT_DIR/fftf.timer" "$UNIT_DIR/fftf.service" \
-      "$UNIT_DIR/fftf-winddown.timer" "$UNIT_DIR/fftf-winddown.service" \
-      "$UNIT_DIR/fftf-windup.timer" "$UNIT_DIR/fftf-windup.service"
+rm -f "$UNIT_DIR/ff.timer" "$UNIT_DIR/ff.service" \
+      "$UNIT_DIR/ff-winddown.timer" "$UNIT_DIR/ff-winddown.service" \
+      "$UNIT_DIR/ff-windup.timer" "$UNIT_DIR/ff-windup.service"
+rm -f "$BIN_DIR/ff-tick" "$BIN_DIR/ff-capture" "$BIN_DIR/ff-afk" \
+      "$BIN_DIR/ff-status" "$BIN_DIR/ff-pause" "$BIN_DIR/ff-unpause" \
+      "$BIN_DIR/ff-winddown" "$BIN_DIR/ff-windup" "$BIN_DIR/ff-save-progress-hook"
+# the fftf-* prefix layout
+rm -f "$UNIT_DIR/fftf.service" "$UNIT_DIR/fftf.timer" \
+      "$UNIT_DIR/fftf-winddown.service" "$UNIT_DIR/fftf-winddown.timer" \
+      "$UNIT_DIR/fftf-windup.service" "$UNIT_DIR/fftf-windup.timer"
 rm -f "$BIN_DIR/fftf-tick" "$BIN_DIR/fftf-capture" "$BIN_DIR/fftf-afk" \
       "$BIN_DIR/fftf-status" "$BIN_DIR/fftf-pause" "$BIN_DIR/fftf-unpause" \
       "$BIN_DIR/fftf-winddown" "$BIN_DIR/fftf-windup" "$BIN_DIR/fftf-save-progress-hook"
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/fftf"
 # pre-Fern names from earlier releases
 rm -f "$UNIT_DIR/focusguard.service" "$UNIT_DIR/focusguard.timer" \
       "$UNIT_DIR/winddown.service" "$UNIT_DIR/winddown.timer" \
@@ -52,7 +61,9 @@ systemctl --user daemon-reload
 if [ "${1:-}" = "--purge" ]; then
   echo "==> Purging config and state"
   rm -rf "$CONF_DIR" "$STATE_DIR"
-  # pre-Fern config/state locations
+  # fftf-* and pre-Fern config/state locations
+  rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/fftf" \
+         "${XDG_STATE_HOME:-$HOME/.local/state}/fftf"
   rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/focusguard" \
          "${XDG_CONFIG_HOME:-$HOME/.config}/winddown" \
          "${XDG_STATE_HOME:-$HOME/.local/state}/focusguard" \

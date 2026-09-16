@@ -23,24 +23,24 @@
 #
 # Trigger this from a systemd user timer at 15:15 Mon-Fri (see systemd/). For
 # testing, run with --now (start immediately) and a short interval, e.g.:
-#   FFTF_INTERVAL_MIN=1 FFTF_NAG_SEC=20 fftf-winddown --now
+#   FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-winddown --now
 set -uo pipefail
 
 # ---- config (env-overridable; a config file can be added later) -------------
-: "${FFTF_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/fftf}"
-: "${FFTF_START:=15:15}"          # clock time the sequence anchors to
-: "${FFTF_INTERVAL_MIN:=10}"      # spacing between question slots (minutes)
-: "${FFTF_NAG_SEC:=120}"          # re-show the popup this often until answered
-: "${FFTF_HARD_STOP_MIN:=120}"    # safety backstop: stop nagging N min after start
-: "${FFTF_SOUND_ENABLED:=1}"
-# Step 4 hook. If set, it is run with FFTF_ANSWERS_FILE exported (the day's Q/A
+: "${FERN_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/ff}"
+: "${FERN_START:=15:15}"          # clock time the sequence anchors to
+: "${FERN_INTERVAL_MIN:=10}"      # spacing between question slots (minutes)
+: "${FERN_NAG_SEC:=120}"          # re-show the popup this often until answered
+: "${FERN_HARD_STOP_MIN:=120}"    # safety backstop: stop nagging N min after start
+: "${FERN_SOUND_ENABLED:=1}"
+# Step 4 hook. If set, it is run with FERN_ANSWERS_FILE exported (the day's Q/A
 # markdown). Empty = a placeholder that just notes it's unconfigured. This is the
 # seam where /save-progress gets wired once its contract is known.
-: "${FFTF_SAVE_PROGRESS_CMD:=}"
+: "${FERN_SAVE_PROGRESS_CMD:=}"
 # Step 5 hook ("have a good evening"). If set, it is run instead of the plain
 # one-shot notify — the seam for composing a presence-aware persistent clock-off
-# nag (e.g. a Fern 'fftf-goodnight'). Empty = a single notification.
-: "${FFTF_GOODNIGHT_CMD:=}"
+# nag (e.g. a Fern 'ff-goodnight'). Empty = a single notification.
+: "${FERN_GOODNIGHT_CMD:=}"
 
 # The interview. Each entry is "key|question": the key is a stable marker written
 # into the day file so other tools (e.g. windup) can extract a specific answer
@@ -56,9 +56,9 @@ START_NOW=0
 
 command -v zenity >/dev/null 2>&1 || { echo "winddown: zenity is required" >&2; exit 1; }
 
-FFTF_LOG_DIR="$FFTF_STATE_DIR/log"
-mkdir -p "$FFTF_STATE_DIR" "$FFTF_LOG_DIR" 2>/dev/null || true
-day_file="$FFTF_STATE_DIR/$(date +%F).md"
+FERN_LOG_DIR="$FERN_STATE_DIR/log"
+mkdir -p "$FERN_STATE_DIR" "$FERN_LOG_DIR" 2>/dev/null || true
+day_file="$FERN_STATE_DIR/$(date +%F).md"
 
 now() { date +%s; }
 
@@ -67,19 +67,19 @@ notify() {
 }
 
 chime() {
-  [ "$FFTF_SOUND_ENABLED" = 1 ] || return 0
+  [ "$FERN_SOUND_ENABLED" = 1 ] || return 0
   canberra-gtk-play -i "${1:-message}" >/dev/null 2>&1 || true
 }
 
-# Anchor: today at FFTF_START, or now if --now.
+# Anchor: today at FERN_START, or now if --now.
 if [ "$START_NOW" = 1 ]; then
   start_epoch=$(now)
 else
-  start_epoch=$(date -d "today $FFTF_START" +%s 2>/dev/null) || start_epoch=$(now)
+  start_epoch=$(date -d "today $FERN_START" +%s 2>/dev/null) || start_epoch=$(now)
 fi
-hard_stop=$(( start_epoch + FFTF_HARD_STOP_MIN * 60 ))
+hard_stop=$(( start_epoch + FERN_HARD_STOP_MIN * 60 ))
 
-# Ask one question, re-showing every FFTF_NAG_SEC until a non-empty answer is
+# Ask one question, re-showing every FERN_NAG_SEC until a non-empty answer is
 # given, or the hard backstop is hit. Prints the answer on stdout; returns 1 if
 # the backstop aborted the sequence.
 ask_until_answered() {
@@ -92,7 +92,7 @@ ask_until_answered() {
     [ "$first" = 1 ] && chime message || { chime dialog-warning; notify "Still waiting: $q" critical; }
     first=0
     ans=$(zenity --entry --title="winddown" --width=520 \
-                 --text="$q" --timeout="$FFTF_NAG_SEC" 2>/dev/null)
+                 --text="$q" --timeout="$FERN_NAG_SEC" 2>/dev/null)
     rc=$?
     # rc 0 = OK; 1 = cancel; 5 = timeout. Only a non-empty OK counts.
     if [ "$rc" = 0 ] && [ -n "${ans//[[:space:]]/}" ]; then
@@ -111,7 +111,7 @@ ask_until_answered() {
 i=0
 for entry in "${QUESTIONS[@]}"; do
   key="${entry%%|*}"; q="${entry#*|}"
-  slot=$(( start_epoch + i * FFTF_INTERVAL_MIN * 60 ))
+  slot=$(( start_epoch + i * FERN_INTERVAL_MIN * 60 ))
   # Hold the rhythm: never pose a question before its slot.
   while [ "$(now)" -lt "$slot" ]; do
     sleep 15
@@ -131,14 +131,14 @@ done
 # windup can surface it the next morning.
 notify "Saving today's progress…"
 chime message
-sp_log="$FFTF_LOG_DIR/save-progress-$(date +%F).log"
-if [ -n "$FFTF_SAVE_PROGRESS_CMD" ]; then
+sp_log="$FERN_LOG_DIR/save-progress-$(date +%F).log"
+if [ -n "$FERN_SAVE_PROGRESS_CMD" ]; then
   {
     printf '===== save-progress %s =====\n' "$(date --iso-8601=seconds)"
-    printf 'cmd: %s\n' "$FFTF_SAVE_PROGRESS_CMD"
+    printf 'cmd: %s\n' "$FERN_SAVE_PROGRESS_CMD"
     printf 'answers-file: %s\n\n' "$day_file"
   } >> "$sp_log"
-  FFTF_ANSWERS_FILE="$day_file" bash -c "$FFTF_SAVE_PROGRESS_CMD" >> "$sp_log" 2>&1
+  FERN_ANSWERS_FILE="$day_file" bash -c "$FERN_SAVE_PROGRESS_CMD" >> "$sp_log" 2>&1
   sp_rc=$?
   printf '\n----- exit %s at %s -----\n\n' "$sp_rc" "$(date --iso-8601=seconds)" >> "$sp_log"
   {
@@ -153,17 +153,17 @@ if [ -n "$FFTF_SAVE_PROGRESS_CMD" ]; then
 else
   {
     printf '### save-progress result\n<!-- wd:save_result -->\n\n'
-    printf 'skipped — FFTF_SAVE_PROGRESS_CMD unset\n\n'
+    printf 'skipped — FERN_SAVE_PROGRESS_CMD unset\n\n'
   } >> "$day_file"
   notify "save-progress isn't wired up yet — answers saved to today's file." normal
 fi
 
 # ---- step 5: done -----------------------------------------------------------
 chime complete
-if [ -n "$FFTF_GOODNIGHT_CMD" ]; then
+if [ -n "$FERN_GOODNIGHT_CMD" ]; then
   # Composable seam: hand off to a presence-aware persistent clock-off nag
-  # (e.g. Fern's fftf-goodnight). Falls back to a plain notify if unset.
-  FFTF_ANSWERS_FILE="$day_file" bash -c "$FFTF_GOODNIGHT_CMD"
+  # (e.g. Fern's ff-goodnight). Falls back to a plain notify if unset.
+  FERN_ANSWERS_FILE="$day_file" bash -c "$FERN_GOODNIGHT_CMD"
 else
   notify "You're all done! Have a good evening!" normal
 fi
