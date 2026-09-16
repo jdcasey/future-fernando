@@ -220,7 +220,8 @@ fftf_break_away_seconds() {
 # audit/diagnostic trail — local only, existence/decision facts, no content.
 fftf_log_detection() {
   [ "$FFTF_LOG_ENABLED" = 1 ] || return 0
-  local f="$FFTF_LOG_DIR/fftf-$(date +%Y%m%d).log"
+  local f
+  f="$FFTF_LOG_DIR/fftf-$(date +%Y%m%d).log"
   printf '%s %s\n' "$(date --iso-8601=seconds)" "$*" >> "$f" 2>/dev/null || true
   find "$FFTF_LOG_DIR" -name 'fftf-*.log' -mtime "+$FFTF_LOG_RETAIN_DAYS" -delete 2>/dev/null || true
 }
