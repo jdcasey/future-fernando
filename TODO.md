@@ -1,21 +1,21 @@
-# focusguard — TODO
+# Fern — TODO
 
 ## Known issue: pointer drift pins the idle counter (breaks never auto-credit)
 
 **Confirmed 2026-09-15 on the ThinkPad P1 daily driver.** Phantom pointer events
 (TrackPoint drift) reset GNOME's `GetIdletime` every 1–2 s *intermittently*, so a real
-absence often never reaches `FG_ACTIVITY_GAP` and no break is credited — you get nagged even
+absence often never reaches `FFTF_ACTIVITY_GAP` and no break is credited — you get nagged even
 after stepping away (observed `stretch_start` frozen ~100 min with `nag_level` climbing).
 A 20 s hands-off sample showed idle pinned <3 s; later it climbed to 460 s — i.e. bursty,
 not a constant pin. The rolling detection log now records raw idle per tick to characterize
 the burst pattern.
 
-- **Primary fix is OS-level**, not focusguard: reduce TrackPoint sensitivity / enable
+- **Primary fix is OS-level**, not Fern: reduce TrackPoint sensitivity / enable
   libinput palm-and-drift rejection, or disable the TrackPoint if unused. Documented in the
   README "Pointer drift" note; a ready fix/test/undo lives in
   `cookbook/thinkpad-trackpoint-drift/` (disables just the nub via `ID_INPUT_POINTINGSTICK`
   udev rule — the daily-driver's own remedy).
-- [ ] Consider a focusguard-side drift tolerance *only if the OS fix is insufficient*: e.g.
+- [ ] Consider a Fern-side drift tolerance *only if the OS fix is insufficient*: e.g.
       require idle to hold above a floor across N consecutive ticks before trusting a low
       reading, or a "credit a break if idle exceeded the gap at any point since the last
       real input burst" heuristic. Both are fragile (can't cleanly separate drift from real
@@ -47,8 +47,8 @@ that syncs today's busy-intervals to a state file out-of-band, so the tick stays
 ## Move break detection fully off session-watching
 
 The break guard now uses **desktop presence** (GNOME/Mutter `IdleMonitor` idle time)
-as its primary signal, with the legacy typed-prompt scan (`fg_last_human_activity`)
-kept only as a fallback under `FG_PRESENCE=auto` / `typed`.
+as its primary signal, with the legacy typed-prompt scan (`fftf_last_human_activity`)
+kept only as a fallback under `FFTF_PRESENCE=auto` / `typed`.
 
 Session-transcript watching is a poor proxy for "is the human at the keyboard": it
 misreads long autonomous agent runs and diff-reading as breaks, and background agent
@@ -61,7 +61,7 @@ drop session-watching from the break path **entirely**.
       before removing the fallback.
 - [ ] Confirm `GetIdletime` behavior across screen-lock, suspend/resume, and multiple
       seats/sessions before trusting presence as the sole signal.
-- [ ] Once the above hold, remove `fg_last_human_activity` from the break-guard path
+- [ ] Once the above hold, remove `fftf_last_human_activity` from the break-guard path
       (keep the two-stage typed-prompt scan only where it's genuinely needed).
 
 **Do NOT** remove session-watching from **answer capture** — Job A legitimately needs
@@ -70,13 +70,13 @@ and distill its last Q/A. Presence is about *the human*; capture is about *a ses
 
 ## Cross-platform support (map for a future contributor)
 
-**Status: speculative.** focusguard is bash + systemd, i.e. Linux-only today. Whether
+**Status: speculative.** Fern is bash + systemd, i.e. Linux-only today. Whether
 full macOS/Windows support is worth building is an open question — this section exists to
 map the shape of the work so anyone who *does* want it can judge the cost, not as a
 committed plan.
 
 The key insight: **the presence query is the easy part.** Reading "seconds since last
-input" is a single, roughly-equivalent call on all three platforms, and focusguard's
+input" is a single, roughly-equivalent call on all three platforms, and Fern's
 away → credit → nag state machine is already platform-neutral logic. The real cost is the
 **host shim** around it — scheduler, notifications, and getting the poller into a context
 that can actually see the interactive user's input. That's a non-trivial install-logic
@@ -115,7 +115,7 @@ tree, and it multiplies per OS.
 
 ### If someone picks this up
 
-- [ ] Factor `fg_idle_seconds` into a selectable presence backend (mirror the LLM-backend
+- [ ] Factor `fftf_idle_seconds` into a selectable presence backend (mirror the LLM-backend
       pattern) — cheap, and useful for non-GNOME **Linux** even if mac/Windows never happen.
 - [ ] Decide host strategy before porting: keep three native host shims, or move the whole
       tool onto one cross-platform runtime. Do a feasibility pass first.
@@ -123,7 +123,7 @@ tree, and it multiplies per OS.
 
 ## Validation
 
-- [x] `GetIdletime` answers from inside the `focusguard.service` systemd user unit
+- [x] `GetIdletime` answers from inside the `fftf.service` systemd user unit
       (verified via `systemd-run --user` — returned a live idle value; `install.sh`
       imports `DBUS_SESSION_BUS_ADDRESS` and the service already used `gdbus --session`).
 - [ ] Confirm `GetIdletime` behavior across a real screen-lock and suspend/resume cycle

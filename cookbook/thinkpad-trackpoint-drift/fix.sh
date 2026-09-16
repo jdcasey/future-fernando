@@ -14,8 +14,8 @@ fi
 
 cat > "$RULE" <<'EOF'
 # Ignore the built-in TrackPoint (pointing stick) — its drift pins GNOME's idle
-# counter, breaking focusguard break-crediting. Unused on this machine.
-# Installed by focusguard cookbook/thinkpad-trackpoint-drift/fix.sh
+# counter, breaking Fern break-crediting. Unused on this machine.
+# Installed by Fern cookbook/thinkpad-trackpoint-drift/fix.sh
 ENV{ID_INPUT_POINTINGSTICK}=="1", ENV{LIBINPUT_IGNORE_DEVICE}="1"
 EOF
 

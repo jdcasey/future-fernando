@@ -1,18 +1,18 @@
-# focusguard configuration — shell fragment, sourced by the scripts.
-# Copy to  ${XDG_CONFIG_HOME:-~/.config}/focusguard/focusguard.conf  and edit.
+# Fern configuration — shell fragment, sourced by the scripts.
+# Copy to  ${XDG_CONFIG_HOME:-~/.config}/fftf/fftf.conf  and edit.
 # Every value below is optional; unset keys fall back to the built-in defaults.
 
 # --- Where Claude Code keeps session transcripts -----------------------------
-# FG_PROJECTS_DIR="$HOME/.claude/projects"
+# FFTF_PROJECTS_DIR="$HOME/.claude/projects"
 
 # --- Feature switches --------------------------------------------------------
-# FG_BREAK_ENABLED=1        # 1=break reminders on, 0=off
-# FG_CAPTURE_ENABLED=1      # 1=auto answer-capture on, 0=off
+# FFTF_BREAK_ENABLED=1        # 1=break reminders on, 0=off
+# FFTF_CAPTURE_ENABLED=1      # 1=auto answer-capture on, 0=off
 
 # --- Break guard timing (seconds) --------------------------------------------
-# FG_BREAK_INTERVAL=3600    # continuous active time before a break is due (60m)
-# FG_ACTIVITY_GAP=600       # absence that counts as a break / resets clock (10m)
-# FG_BREAK_GRACE=300        # after 'fg-afk': quiet window before the nag returns
+# FFTF_BREAK_INTERVAL=3600    # continuous active time before a break is due (60m)
+# FFTF_ACTIVITY_GAP=600       # absence that counts as a break / resets clock (10m)
+# FFTF_BREAK_GRACE=300        # after 'fftf-afk': quiet window before the nag returns
                             # if you didn't actually step away (5m)
 
 # --- Break guard presence signals (stackable) --------------------------------
@@ -23,10 +23,10 @@
 #   Profiles:
 #     default  = idle,audio-in   fixes the meeting blind-spot; conservative optics
 #     minimal  = idle            idle only; meeting-blind, least ambient sensing
-#     off      = <nothing>       no ambient sensing; rely on fg-afk / fg-pause
+#     off      = <nothing>       no ambient sensing; rely on fftf-afk / fftf-pause
 #   Back-compat: auto (idle, else typed fallback), idle, typed.
 #
-#   Signals you can compose, e.g.  FG_PRESENCE=idle,audio-in,audio-out :
+#   Signals you can compose, e.g.  FFTF_PRESENCE=idle,audio-in,audio-out :
 #     idle       desktop idle time (GNOME/Mutter via gdbus). Requires GNOME + gdbus.
 #     audio-in   mic in use (an app is capturing) — strong "in a meeting" signal.
 #     audio-out  speaker in use (an app is playing) — catches muted-listening and
@@ -37,60 +37,60 @@
 #   Audio signals are ADDITIVE — they only hold the clock "present"; combine them
 #   with idle (or typed) for the away baseline. audio-* alone never credits a break.
 #   Audio signals read only THAT a stream exists (via pactl), never its content,
-#   and never touch the network. See "What focusguard observes" in the README.
+#   and never touch the network. See "What Fern observes" in the README.
 #   NOTE: on a machine with pointer drift (e.g. a ThinkPad TrackPoint), the idle
 #   counter can be pinned low by phantom input so breaks are never auto-credited;
 #   fix that at the OS level (TrackPoint sensitivity) — see the detection log.
-# FG_PRESENCE=auto
-# FG_PACTL_BIN=pactl        # tool used for audio-device presence checks
+# FFTF_PRESENCE=auto
+# FFTF_PACTL_BIN=pactl        # tool used for audio-device presence checks
 
-# --- Pause guard (fg-pause / fg-unpause) -------------------------------------
-# fg-pause silences the nag when you CAN'T step away, WITHOUT crediting a break
+# --- Pause guard (fftf-pause / fftf-unpause) -------------------------------------
+# fftf-pause silences the nag when you CAN'T step away, WITHOUT crediting a break
 # (the stretch clock keeps running). Auto-expires so a forgotten pause can't
 # disable the guard all day.
-# FG_PAUSE_DEFAULT=1800     # default pause length when none is given (30m)
-# FG_PAUSE_MAX=7200         # hard cap on any single pause (2h)
+# FFTF_PAUSE_DEFAULT=1800     # default pause length when none is given (30m)
+# FFTF_PAUSE_MAX=7200         # hard cap on any single pause (2h)
 
 # --- Rolling detection log ---------------------------------------------------
 # One line per tick (~2 min) recording what each presence signal read and the
 # decision taken — the audit/diagnostic trail. Local only; no content. View with
-# 'fg-status --log'. Daily files under <state>/log, auto-pruned.
-# FG_LOG_ENABLED=1
-# FG_LOG_RETAIN_DAYS=3
+# 'fftf-status --log'. Daily files under <state>/log, auto-pruned.
+# FFTF_LOG_ENABLED=1
+# FFTF_LOG_RETAIN_DAYS=3
 
 # --- Break guard delivery ----------------------------------------------------
-# FG_NOTIFY_STACK=0         # 0=one sticky banner that updates; 1=stack a new one each nag
-# FG_SOUND_ENABLED=1        # play escalating sounds
+# FFTF_NOTIFY_STACK=0         # 0=one sticky banner that updates; 1=stack a new one each nag
+# FFTF_SOUND_ENABLED=1        # play escalating sounds
 
 # --- Grounding suggestion ----------------------------------------------------
 # Attach one randomly-chosen grounding/break practice (breathing, 5-4-3-2-1,
 # etc.) to each break nag, under a "leave the room / look away" lead-in. Edit the
 # list to add your own — one "Name — instructions" per line.
-# FG_GROUNDING_ENABLED=1
-# FG_GROUNDING_FILE=""      # empty = the installed data/grounding.txt; set a path
+# FFTF_GROUNDING_ENABLED=1
+# FFTF_GROUNDING_FILE=""      # empty = the installed data/grounding.txt; set a path
 #                           # to your own list to override it
 
 # --- Answer capture ----------------------------------------------------------
-# FG_CAPTURE_IDLE=480       # a session must be stale this long to trigger capture (8m)
-# FG_CAPTURE_MAX_AGE=86400  # ignore sessions idle longer than this (24h)
-# FG_CAPTURE_PER_TICK=2     # cap capture calls per tick (cost/latency guard)
-# FG_CAPTURE_TIMEOUT=120    # per-capture LLM timeout (seconds)
-# FG_CAPTURE_TAIL_BYTES=12000  # how much of the transcript tail to feed the model
+# FFTF_CAPTURE_IDLE=480       # a session must be stale this long to trigger capture (8m)
+# FFTF_CAPTURE_MAX_AGE=86400  # ignore sessions idle longer than this (24h)
+# FFTF_CAPTURE_PER_TICK=2     # cap capture calls per tick (cost/latency guard)
+# FFTF_CAPTURE_TIMEOUT=120    # per-capture LLM timeout (seconds)
+# FFTF_CAPTURE_TAIL_BYTES=12000  # how much of the transcript tail to feed the model
 
 # Where QUESTION-*.md files go. Empty = each session's own <project>/.temp/.
 # Set an absolute path to funnel every capture into one central folder instead.
-# FG_CAPTURE_DIR=""
+# FFTF_CAPTURE_DIR=""
 
 # --- LLM backend (shared by all LLM-using features) --------------------------
-# FG_LLM_BACKEND="claude"          # claude (hosted) | ollama (local, self-contained)
-# FG_LLM_MODEL=""                  # optional: override whichever backend's model
+# FFTF_LLM_BACKEND="claude"          # claude (hosted) | ollama (local, self-contained)
+# FFTF_LLM_MODEL=""                  # optional: override whichever backend's model
 
 # claude backend
-# FG_CLAUDE_BIN="claude"           # absolute path recommended (install.sh sets this)
-# FG_CLAUDE_MODEL="claude-haiku-4-5-20251001"
+# FFTF_CLAUDE_BIN="claude"           # absolute path recommended (install.sh sets this)
+# FFTF_CLAUDE_MODEL="claude-haiku-4-5-20251001"
 
 # ollama backend (fully local / offline / no cost)
-# FG_OLLAMA_URL="http://localhost:11434"
-# FG_OLLAMA_MODEL="llama3.2:3b"    # try llama3.1:8b, mistral, gemma2:2b, etc.
-# FG_OLLAMA_NUM_CTX=8192           # raise if the transcript tail gets truncated
-# FG_OLLAMA_KEEP_ALIVE="5m"        # how long ollama keeps the model warm
+# FFTF_OLLAMA_URL="http://localhost:11434"
+# FFTF_OLLAMA_MODEL="llama3.2:3b"    # try llama3.1:8b, mistral, gemma2:2b, etc.
+# FFTF_OLLAMA_NUM_CTX=8192           # raise if the transcript tail gets truncated
+# FFTF_OLLAMA_KEEP_ALIVE="5m"        # how long ollama keeps the model warm

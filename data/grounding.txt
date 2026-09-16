@@ -1,4 +1,4 @@
-# focusguard — grounding / break practices
+# Fern — grounding / break practices
 #
 # One practice per line, "Name — one-line instructions". Lines starting with '#'
 # and blank lines are ignored. The break-guard picks ONE at random per nag and
