@@ -46,7 +46,8 @@ now=$(date +%s)
 # and only real physical absence credits a break. `away` = seconds since ANY
 # enabled signal last said you were present. See ff_break_away_seconds /
 # FERN_PRESENCE in ff-common.sh.
-away=$(ff_break_away_seconds)
+ff_break_away            # sets FERN_AWAY_SECONDS + FERN_AWAY_SOURCE
+away=$FERN_AWAY_SECONDS
 
 # Raw sensor snapshot for the rolling detection log (independent of which signals
 # are enabled, so the log can reveal e.g. an idle counter pinned low by pointer
@@ -132,6 +133,16 @@ if [ "$FERN_BREAK_ENABLED" = 1 ]; then
     # reset the stretch clock — you haven't actually stepped away yet.
     close_notification
     decision=grace
+  elif [ "$FERN_BREAK_GRACE" -gt 0 ] && [ "$away" -ge "$FERN_BREAK_GRACE" ]; then
+    # Settling into a break: you've now been idle at least the grace length but not
+    # yet a full credited gap (FERN_BREAK_GRACE <= away < FERN_ACTIVITY_GAP). Stay
+    # quiet and let it ride to the credit gap — do NOT re-nag someone who is
+    # visibly walking away. If you come back, `away` drops below grace and the nag
+    # resumes; if you stay away, the gap credits the break. This closes the hole
+    # where grace (short) expires before the credit gap (long) is reached.
+    # Presence-only: keep-typing users never reach this (away stays < grace).
+    close_notification
+    decision=settling
   else
     rm -f "$FERN_STATE_DIR/grace_until"   # grace expired without a real break
     start=$(cat "$FERN_STATE_DIR/stretch_start" 2>/dev/null || true)
@@ -158,7 +169,7 @@ grace_until=$(cat "$FERN_STATE_DIR/grace_until" 2>/dev/null || echo 0)
 log_nag=$(cat "$FERN_STATE_DIR/nag_level" 2>/dev/null || echo 0)
 log_pleft=0; [ "$now" -lt "$pause_until" ] && log_pleft=$(( pause_until - now ))
 log_gleft=0; [ "$now" -lt "$grace_until" ] && log_gleft=$(( grace_until - now ))
-ff_log_detection "idle=${log_idle} mic=${log_mic} spk=${log_spk} away=${away}" \
+ff_log_detection "idle=${log_idle} mic=${log_mic} spk=${log_spk} away=${away} src=${FERN_AWAY_SOURCE}" \
                  "active=${active} nag=${log_nag} pause=${log_pleft} grace=${log_gleft}" \
                  "presence=${FERN_PRESENCE} decision=${decision}"
 

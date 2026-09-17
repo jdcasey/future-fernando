@@ -195,8 +195,13 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
 - A genuine ≥`FERN_ACTIVITY_GAP` absence (you actually stepped away, or the computer
   suspended/slept) is the only thing that *credits* the break and resets the clock.
 - `ff-afk` hushes the nag now and opens a `FERN_BREAK_GRACE` (5 min) grace window so you can
-  leave without the banner blaring — but it does **not** reset the clock. If no real quiet
-  gap follows, the nag returns when grace expires.
+  leave without the banner blaring — but it does **not** reset the clock. Keep working
+  (presence stays live) and the nag returns when grace expires.
+- **Settling:** once you've actually been idle for at least `FERN_BREAK_GRACE` but haven't yet
+  reached the full `FERN_ACTIVITY_GAP`, the guard stays quiet and lets the clock run to the
+  credit — it won't re-nag someone who is visibly walking away. Come back (presence returns)
+  and nagging resumes; stay away and the gap credits the break. This is presence-based, so it
+  applies whether or not you ran `ff-afk`.
 - `ff-pause [DURATION]` is for when you **can't** step away (a meeting you can't leave, an
   incident). It silences the nag for the window but does **not** credit a break — the stretch
   clock keeps running, so you return overdue and get nagged as soon as it expires. It
@@ -213,7 +218,9 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
 ### Rolling detection log
 
 Every tick appends one line to `<state>/log/ff-YYYYMMDD.log` recording what each presence
-signal read and the decision taken (`active`, `paused`, `grace`, `credit-break`, `nag:N`).
+signal read, which signal is holding you present (`src=`), and the decision taken (`active`,
+`paused`, `grace`, `settling`, `credit-break`, `nag:N`). `ff-status` likewise shows the
+winning signal on its presence line (e.g. "via keyboard/mouse", "via mic (in a call)").
 It's the audit and diagnostic trail — view it with `ff-status --log`. Daily files, retained
 `FERN_LOG_RETAIN_DAYS` (3) days. Like everything else, it stays on your machine and records
 only presence facts and decisions, never any content.

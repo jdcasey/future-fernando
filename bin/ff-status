@@ -49,7 +49,8 @@ if [ "${1:-}" = "--log" ]; then
 fi
 
 now=$(date +%s)
-away=$(ff_break_away_seconds)
+ff_break_away            # sets FERN_AWAY_SECONDS + FERN_AWAY_SOURCE
+away=$FERN_AWAY_SECONDS
 
 fmt() { printf '%dm %ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
@@ -65,7 +66,7 @@ else
   sig_desc="$(ff_presence_signals | tr ' ' ',' )"
   [ -z "${sig_desc//,}" ] && sig_desc="off (no ambient sensing)"
 fi
-echo "  presence      : $(fmt "$away") since present   [signals: $sig_desc]"
+echo "  presence      : $(fmt "$away") since present, via $(ff_source_label "$FERN_AWAY_SOURCE")   [signals: $sig_desc]"
 echo "  sensors       : idle=${idle_now}s  mic=${mic}  speaker=${spk}"
 
 # --- break-guard state machine (mirrors ff-tick) -----------------------------
@@ -79,6 +80,9 @@ elif [ "$now" -lt "$pause_until" ]; then
 elif [ "$now" -lt "$grace_until" ]; then
   left=$(( grace_until - now ))
   echo "  state         : afk grace — quiet for $(fmt "$left") (step away to credit it)"
+elif [ "$FERN_BREAK_GRACE" -gt 0 ] && [ "$away" -ge "$FERN_BREAK_GRACE" ]; then
+  need=$(( FERN_ACTIVITY_GAP - away )); [ "$need" -lt 0 ] && need=0
+  echo "  state         : settling into a break — quiet ($(fmt "$away") idle; credits in ~$(fmt "$need"))"
 else
   start=$(cat "$FERN_STATE_DIR/stretch_start" 2>/dev/null || echo "$now")
   active=$(( now - start ))

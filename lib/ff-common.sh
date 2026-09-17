@@ -177,29 +177,38 @@ ff_presence_signals() {
   esac
 }
 
-# Seconds since you were last "present" for break-guard purposes. Presence beats
-# typing: watching an agent counts as work, and only real physical absence
-# credits a break. Signals STACK — the result is the SMALLEST away-gap across all
-# enabled signals, so any one of them reporting "present now" (e.g. mic live in a
-# meeting) holds the clock. On total signal failure it degrades to "present" (0)
-# rather than faking a break, so a broken sensor errs toward nagging you, never
-# toward silently suppressing reminders.
-ff_break_away_seconds() {
-  local sigs s val best="" now last
+# Compute break-guard presence and record WHICH signal is holding you present.
+# Sets two globals (so callers get the winning source without a second pass and
+# without a subshell swallowing it):
+#   FERN_AWAY_SECONDS = seconds since you were last present (see below)
+#   FERN_AWAY_SOURCE  = the enabled signal that produced that reading
+#                       (idle | audio-in | audio-out | typed | none)
+#
+# Presence beats typing: watching an agent counts as work, and only real physical
+# absence credits a break. Signals STACK — the result is the SMALLEST away-gap
+# across all enabled signals, so any one of them reporting "present now" (e.g. mic
+# live in a meeting) holds the clock, and FERN_AWAY_SOURCE names that one. On total
+# signal failure it degrades to "present" (0, source "none") rather than faking a
+# break, so a broken sensor errs toward nagging you, never toward silently
+# suppressing reminders.
+ff_break_away() {
+  local sigs s val best="" src="" now last
   now=$(date +%s)
 
   # auto: idle if the monitor answers, else the legacy typed signal (FALLBACK,
   # not an OR — preserves the original 'auto' semantics).
   if [ "$FERN_PRESENCE" = auto ]; then
-    if val=$(ff_idle_seconds); then printf '%s\n' "$val"; return 0; fi
+    if val=$(ff_idle_seconds); then
+      FERN_AWAY_SECONDS="$val"; FERN_AWAY_SOURCE=idle; return 0
+    fi
     last=$(ff_last_human_activity); [ -z "$last" ] && last=0
-    printf '%s\n' "$(( now - last ))"; return 0
+    FERN_AWAY_SECONDS=$(( now - last )); FERN_AWAY_SOURCE=typed; return 0
   fi
 
   sigs=$(ff_presence_signals)
   # off / empty: no ambient sensing. Report present (0); breaks are credited only
   # by ff-afk actually being followed by a real gap — the guard runs on elapsed time.
-  [ -z "${sigs// }" ] && { printf '0\n'; return 0; }
+  [ -z "${sigs// }" ] && { FERN_AWAY_SECONDS=0; FERN_AWAY_SOURCE=none; return 0; }
 
   # shellcheck disable=SC2086  # deliberate word-split of the signal list
   for s in $sigs; do
@@ -212,11 +221,32 @@ ff_break_away_seconds() {
                  val=$(( now - last )) ;;
     esac
     [ -n "$val" ] || continue
-    { [ -z "$best" ] || [ "$val" -lt "$best" ]; } && best="$val"
+    if [ -z "$best" ] || [ "$val" -lt "$best" ]; then best="$val"; src="$s"; fi
   done
   # No signal produced a reading -> degrade to present, never fake a break.
-  [ -z "$best" ] && best=0
-  printf '%s\n' "$best"
+  if [ -z "$best" ]; then best=0; src=none; fi
+  FERN_AWAY_SECONDS="$best"; FERN_AWAY_SOURCE="$src"
+}
+
+# Back-compat wrapper: prints the away seconds (callers that also want the source
+# should call ff_break_away and read $FERN_AWAY_SOURCE, since a command
+# substitution here would discard the globals).
+ff_break_away_seconds() {
+  ff_break_away
+  printf '%s\n' "$FERN_AWAY_SECONDS"
+}
+
+# Human-readable label for a FERN_AWAY_SOURCE value.
+ff_source_label() {
+  case "${1:-}" in
+    idle)      printf 'keyboard/mouse' ;;
+    audio-in)  printf 'mic (in a call)' ;;
+    audio-out) printf 'speaker audio' ;;
+    typed)     printf 'typed prompt' ;;
+    none)      printf 'no signal (assumed present)' ;;
+    '')        printf 'unknown' ;;
+    *)         printf '%s' "$1" ;;
+  esac
 }
 
 # Append one detection record to today's rolling log and prune old days. Callers
