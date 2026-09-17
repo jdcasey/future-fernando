@@ -228,8 +228,17 @@ only presence facts and decisions, never any content.
 ## Answer capture details
 
 - On idle transition, Fern asks an LLM (see [Capture backends](#capture-backends) below) to
-  distill the recent user/assistant turns and writes `QUESTION-<slug>-<date>.md` containing
-  the question, a concise answer/conclusion, and light context. Trivial tails are skipped.
+  distill the recent user/assistant turns and writes `QUESTION-<slug>-<session-id>.md`
+  containing the question, a concise answer/conclusion, and light context. Trivial tails are
+  skipped. The full session id is embedded in the file as an HTML comment for traceability.
+- **One file per session.** The filename carries a short session id, and each recapture
+  **supersedes** that session's prior file. A tab you leave open and that gets recaptured on
+  every idle cycle collapses to a single, current digest — the latest thing you walked away
+  from — instead of a pile of near-duplicates. Distinct sessions keep distinct files, so two
+  different tabs parked on the same topic still produce two files. A failed or "nothing worth
+  saving" recapture leaves the previous file untouched.
+- Each workspace's `.temp/` is groomed on capture: `QUESTION-*.md` older than
+  `FERN_CAPTURE_RETAIN_DAYS` (default 14) are pruned.
 - Only the **last real exchange** is fed to the model — the most recent human-typed prompt
   and the assistant text that followed it. That is the highest-signal, smallest input
   (which also keeps a local model fast). Sessions with **no** human-typed prompt — command

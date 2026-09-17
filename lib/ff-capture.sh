@@ -132,10 +132,25 @@ ff_slug() {
     | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-' | cut -c1-50
 }
 
+# Prune QUESTION-*.md older than FERN_CAPTURE_RETAIN_DAYS in a workspace .temp dir.
+# Keeps each workspace's capture pile bounded without touching anything else there.
+ff_prune_captures() {
+  local dir="$1"
+  [ -d "$dir" ] || return 0
+  [ "${FERN_CAPTURE_RETAIN_DAYS:-0}" -gt 0 ] || return 0
+  find "$dir" -maxdepth 1 -name 'QUESTION-*.md' \
+       -mtime +"$FERN_CAPTURE_RETAIN_DAYS" -delete 2>/dev/null || true
+}
+
 # Full capture: distill -> render -> write file under the session's project.
+# One file per session: the filename carries a short session id and each recapture
+# SUPERSEDES the session's prior file (its distilled last-exchange changed), so a tab
+# left open and recaptured many times collapses to a single, current digest instead of
+# a pile of near-duplicates. Distinct sessions keep distinct files. The full session id
+# is embedded so a file can always be traced back to its transcript.
 # return: 0 wrote a file | 2 skipped/trivial | 1 error
 ff_capture_session() {
-  local file="$1" cwd outdir json md slug ts outfile rc
+  local file="$1" cwd outdir json md slug sid sid8 outfile rc old
   cwd=$(ff_transcript_cwd "$file"); [ -z "$cwd" ] && return 1
   [ -d "$cwd" ] || return 1
   if [ -n "$FERN_CAPTURE_DIR" ]; then outdir="$FERN_CAPTURE_DIR"; else outdir="$cwd/.temp"; fi
@@ -149,9 +164,17 @@ ff_capture_session() {
   [ "$rc" -eq 2 ] && return 2
 
   slug=$(ff_slug "$json"); [ -z "$slug" ] && slug="session"
-  ts=$(date +%Y%m%d)
-  outfile="$outdir/QUESTION-${slug}-${ts}.md"
-  [ -e "$outfile" ] && outfile="$outdir/QUESTION-${slug}-${ts}-$(date +%H%M%S).md"
-  printf '%s\n' "$md" > "$outfile" || return 1
+  sid=$(basename "$file" .jsonl)
+  sid8=${sid:0:8}
+
+  # Supersede any earlier capture of THIS session (slug may have changed since).
+  while IFS= read -r old; do
+    [ -n "$old" ] && [ "$old" != "$outdir/QUESTION-${slug}-${sid8}.md" ] && rm -f "$old"
+  done < <(find "$outdir" -maxdepth 1 -name "QUESTION-*-${sid8}.md" 2>/dev/null)
+
+  outfile="$outdir/QUESTION-${slug}-${sid8}.md"
+  { printf '<!-- session: %s -->\n' "$sid"; printf '%s\n' "$md"; } > "$outfile" || return 1
+
+  ff_prune_captures "$outdir"
   return 0
 }

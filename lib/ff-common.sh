@@ -73,6 +73,7 @@ FERN_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ff/ff.conf"
 : "${FERN_CAPTURE_TIMEOUT:=120}"
 : "${FERN_CAPTURE_TAIL_BYTES:=12000}"
 : "${FERN_CAPTURE_DIR:=}"
+: "${FERN_CAPTURE_RETAIN_DAYS:=14}"   # prune QUESTION-*.md older than this per workspace .temp
 
 # LLM backend (shared by every LLM-using support, not just capture)
 : "${FERN_LLM_BACKEND:=claude}"          # claude | ollama
