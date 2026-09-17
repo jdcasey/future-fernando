@@ -55,6 +55,23 @@ not a committed plan.
       machine + config in Python; do a feasibility pass first (mirror the cross-platform
       section's "host concerns" framing).
 
+## wrap save target: journal vs. day file (deferred)
+
+**Raised 2026-09-17.** `ff-begin` currently resurfaces a short answer straight from the
+day file, and `FERN_BEGIN_APPEND` nudges toward the journal ("look at yesterday's journal
+for more"). Open question: should begin (or the save step) treat a richer journal as the
+canonical "more detail" source, and how much should the day file duplicate it?
+
+**Deferred deliberately.** The save action is pluggable (`FERN_SAVE_PROGRESS_CMD`), and the
+daily-driver wires it to Claude + Logseq — a large, personal investment we do NOT want to
+bake into the tool. It is not automatic that another user has a journaling piece at all, or
+that their save command produces anything beyond the day file. So begin must keep working
+from the day file alone, and any journal coupling stays optional.
+
+- [ ] Decide the contract later: does the day file stay self-sufficient (begin never needs
+      the journal), or does begin gain an optional, configurable "open/summarize the journal"
+      path for users who have one? Keep the day-file-only path as the floor either way.
+
 ## Calendar presence (distant optional — deferred)
 
 A `calendar` presence signal would catch no-audio meetings (in-person, phone, muted +

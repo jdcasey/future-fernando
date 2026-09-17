@@ -1,8 +1,8 @@
-# winddown — end-of-day extraction sequence
+# wrap — end-of-day extraction sequence
 
 **Status: design draft, folded into Fern.** Now lives in the Fern repo
-(shared install/uninstall, one README). Command/config naming (`wd-*` vs `ff-*`) and
-shared helpers are still to be unified — deferred to the planned project rename.
+(shared install/uninstall, one README). Commands and config are named `ff-begin`/`ff-wrap`
+with a shared `ff-workday.env`; shared *code* helpers (notify/chime) are still to be unified.
 
 ## Goal
 
@@ -14,19 +14,23 @@ interview stages require a typed response and **nag every 2 min until I answer**
 ## Sequence
 
 1. **interview** — "It's almost time to be done today. What did you get done?"
-2. **interview** — "What things are most important to start with tomorrow? Check
-   your calendar so you can see."
-3. **interview** — "Are there any special items that should be included in today's
+2. **interview (multi-line)** — "What's most important to start with tomorrow? Check
+   your calendar." Full detail; bullet lists welcome (this zenity's `--text-info` has no
+   label, so the question is seeded into the editable box and stripped back off the reply).
+3. **interview** — "In one line: the 1–2 things to start with first." The short version
+   `begin` resurfaces (keeps the morning notification brief, full detail stays in the file).
+4. **interview** — "Are there any special items that should be included in today's
    summary?"
-4. **run-skill** — `/save-progress`, incorporating the interview answers (esp. the
+5. **run-skill** — `/save-progress`, incorporating the interview answers (esp. the
    special items).
-5. **notify** — "You're all done! Have a good evening!"
+6. **notify** — "You're all done! Have a good evening!"
 
 ## Timing model
 
 - **Trigger:** systemd user timer, `Mon..Fri 15:15`.
-- **Question rhythm:** ~10 min apart → 3:15 / 3:25 / 3:35, so `/save-progress`
-  fires ~3:45 with ~15 min of runway before 4:00.
+- **Question rhythm:** ~10 min apart → 3:15 / 3:25 / 3:35 / 3:45, so `/save-progress`
+  fires ~3:55. The extra (short) question lengthens the run rather than starting it
+  earlier — save-progress finishes with time to spare, so the later end is accepted.
 - **Nag:** within a question's window, re-prompt every 2 min until answered.
 
 ## Architecture sketch (draft — pending decisions)
@@ -73,8 +77,7 @@ interview stages require a typed response and **nag every 2 min until I answer**
       User's stance: try/iterate rather than perfect upfront.
 - [x] **Diagnosis wired:** step-4 output+exit go to
       `<state>/log/save-progress-DATE.log`; a `wd:save_result` marker
-      lands in the day file; failure -> critical notify that evening; windup
-      surfaces yesterday's result each morning.
+      lands in the day file; failure -> critical notify that evening.
 
 ## Good-evening (step 5) — composition
 
@@ -84,13 +87,15 @@ recommended composition is a NEW Fern feature (`ff-goodnight`) that provides
 a **presence-aware, escalating, sticky clock-off nag** — because Fern already
 owns presence detection + escalation + acknowledgment, and a "you should be logged
 off" nag is the inverse of its break nag, and it should STOP once you actually
-leave the keyboard (which winddown can't detect on its own). winddown's step 5
+leave the keyboard (which wrap can't detect on its own). wrap's step 5
 would just trigger it. If Fern isn't installed, the plain notify is the
 fallback. Not built yet — awaiting go-ahead.
 
-## windup (morning bookend)
+## begin (morning bookend)
 
-`bin/windup` + a Mon–Fri 09:00 timer: reads the most recent prior day file, pulls
-the `<!-- wd:tomorrow -->` answer, and shows it ("From <day>, you planned to start
-with: …") as a zenity info popup + notification. One-shot by design. Relies on the
-keyed markers winddown now writes.
+`bin/ff-begin` + a Mon–Fri 09:00 timer: reads the most recent prior day file, pulls
+the short `<!-- wd:top -->` answer (falling back to `<!-- wd:tomorrow -->` for older
+files), and shows it ("Start here (from <day>): …") as a zenity info popup +
+notification. One-shot by design. Relies on the keyed markers wrap writes. On each run
+it also grooms the day-files directory, pruning files older than `FERN_DAY_RETAIN_DAYS`
+(default 7; the read happens first, so the resurfaced note is never at risk).

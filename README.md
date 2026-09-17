@@ -12,7 +12,7 @@ something you have to remember to do:
   after ~60 min of continuous work.
 - **[Answer capture](#answer-capture)** — when you get pulled away mid-thread, Fern saves
   the last question and its answer so you can find it later.
-- **[Winddown & windup](#end-of-day-winddown--morning-windup)** — weekday bookends that
+- **[Wrap & begin](#end-of-day-wrap--morning-begin)** — weekday bookends that
   walk you out of deep focus at day's end and point you back to it in the morning.
 
 ## The daily loop
@@ -79,32 +79,41 @@ skipped. The distillation is done by a pluggable LLM backend (hosted `claude` by
 or a fully-offline local `ollama`). See [Answer capture details](#answer-capture-details)
 and [Capture backends](#capture-backends).
 
-## End-of-day winddown & morning windup
+## End-of-day wrap & morning begin
 
 Two day-shape bookends, each on its own weekday `systemd` timer. Where the break guard and
-capture run every couple of minutes, these fire once a day. (Incubating — see
-[`docs/winddown-design.md`](docs/winddown-design.md) for rationale and open decisions.)
+capture run every couple of minutes, these fire once a day. Both notify under the name
+**Fernando**. (Incubating — see
+[`docs/wrap-design.md`](docs/wrap-design.md) for rationale and open decisions.)
 
-**winddown** (Mon–Fri, 3:15pm) gradually pulls you out of deep focus so you're mentally
-done by ~4:00. It poses three interview questions, each as a **zenity popup** that
-re-shows every ~2 min until you answer (the nag), spaced ~10 min apart:
+**wrap** (Mon–Fri, 3:15pm) gradually pulls you out of deep focus. It poses four
+interview questions, each as a **zenity popup** that re-shows every ~2 min until you
+answer (the nag), spaced ~10 min apart:
 
 1. What did you get done today?
-2. What's most important to start with tomorrow? (a reminder to check your calendar)
-3. Any special items for today's summary?
+2. What's most important to start with tomorrow? (a **multi-line box** — bullet lists
+   welcome; this is the full detail, saved to your day file/journal, and a reminder to
+   check your calendar)
+3. In one line: the 1–2 things to start with first. (the short version begin resurfaces)
+4. Any special items for today's summary?
 
 After the last answer it runs the **save-progress hook**, then a final "you're all done"
 notification. Answers accumulate in `<state>/YYYY-MM-DD.md`, each tagged with a
-stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer.
+stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer. Adding the
+short question lets the routine run a little longer rather than starting earlier.
 
-**windup** (Mon–Fri, 9am) reads your **previous working day's** file and resurfaces the
-"what to start with tomorrow" answer (a zenity popup + notification) so you begin pointed
-the right way. One-shot; it just reads the keyed marker.
+**begin** (Mon–Fri, 9am) reads your **previous working day's** file and resurfaces the
+short "1–2 things to start with" answer (a zenity popup + notification) so you begin
+pointed the right way — keeping the notification brief while the full detail stays in the
+day file. One-shot; it reads the keyed marker (falling back to the full "tomorrow" answer
+for older files). Set `FERN_BEGIN_APPEND` to add a fixed footer line (e.g. a nudge to open
+your journal). On each run it also grooms the day-files directory, pruning files older than
+`FERN_DAY_RETAIN_DAYS`.
 
-To avoid popups all evening on a day you walk away, winddown hard-stops `FERN_HARD_STOP_MIN`
+To avoid popups all evening on a day you walk away, wrap hard-stops `FERN_HARD_STOP_MIN`
 minutes after it starts (default 120). Nothing is saved if it backstops mid-interview. Tuning,
 the save-progress hook, and the full config table are in
-[winddown/windup configuration](#winddownwindup-configuration).
+[wrap/begin configuration](#wrapbegin-configuration).
 
 ---
 
@@ -297,9 +306,9 @@ FERN_CAPTURE_PER_TICK=1       # only one slow local capture per tick, so two can
 the first does the switch, the second keeps slow-but-valid captures from being killed
 mid-generation. To change models, set `FERN_OLLAMA_MODEL` (e.g. `llama3.1:8b`).
 
-## winddown/windup configuration
+## wrap/begin configuration
 
-Set these for the timers in `~/.config/ff/ff-winddown.env` (`KEY=value`, one per line,
+Set these for the timers in `~/.config/ff/ff-workday.env` (`KEY=value`, one per line,
 no shell quoting; read by both units):
 
 | Var | Default | Meaning |
@@ -311,10 +320,12 @@ no shell quoting; read by both units):
 | `FERN_SOUND_ENABLED` | `1` | Play chimes |
 | `FERN_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook; run with `FERN_ANSWERS_FILE` exported |
 | `FERN_GOODNIGHT_CMD` | *(empty)* | Step-5 hook; empty = one-shot "good evening" notify |
-| `FERN_WINDUP_KEY` | `tomorrow` | Which winddown answer windup resurfaces |
-| `FERN_WINDUP_DIALOG` | `1` | windup shows a zenity popup (plus notification) |
+| `FERN_BEGIN_KEY` | `top` | Which wrap answer begin resurfaces (falls back to `tomorrow`) |
+| `FERN_BEGIN_DIALOG` | `1` | begin shows a zenity popup (plus notification) |
+| `FERN_BEGIN_APPEND` | *(empty)* | Fixed footer line appended to the begin notification |
+| `FERN_DAY_RETAIN_DAYS` | `7` | begin prunes day files older than N days (`0` = keep all) |
 
-Test the flow immediately (no waiting for 3:15): `FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-winddown --now`.
+Test the flow immediately (no waiting for 3:15): `FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now`.
 
 ### save-progress hook
 
@@ -328,9 +339,8 @@ the timer.
 
 **Diagnosis.** Every save-progress run is logged: full stdout+stderr to
 `<state>/log/save-progress-YYYY-MM-DD.log`, a `wd:save_result` line (exit + log
-path) in the day file, a `critical` notification on failure that evening, and windup
-surfaces the previous day's result each morning — so a headless run you can't watch live is
-reviewable after the fact.
+path) in the day file, and a `critical` notification on failure that evening — so a
+headless run you can't watch live is reviewable after the fact.
 
 The `FERN_GOODNIGHT_CMD` seam (step 5) is where a presence-aware persistent clock-off nag
 would compose in; unset, step 5 is a single notification.
@@ -346,8 +356,8 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
 | `ff-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
 | `ff-unpause` | End an active pause early. |
 | `ff-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
-| `ff-winddown [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FERN_START`. |
-| `ff-windup` | Resurface the previous working day's "start with" note. |
+| `ff-wrap [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FERN_START`. |
+| `ff-begin` | Resurface the previous working day's "start with" note. |
 | `ff-tick` | **Internal** — one scan pass (break guard + capture). Run by `ff.timer` every ~2 min. |
 
 ---
@@ -364,8 +374,8 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
   `glib2` (`gdbus`), and `flock`.
 - Optional: `pactl` (PipeWire/PulseAudio) for the `audio-in` / `audio-out` presence signals.
   Without it the break guard still works on desktop idle; the audio signals are simply inert.
-- Optional: `zenity` for the winddown end-of-day interview popups. Without it the break
-  guard and capture are unaffected; only winddown can't prompt.
+- Optional: `zenity` for the wrap end-of-day interview popups. Without it the break
+  guard and capture are unaffected; only wrap can't prompt.
 
 ## Install
 
@@ -376,7 +386,7 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
 It installs the scripts to `~/.local/bin`, the units to `~/.config/systemd/user`, writes a
 config to `~/.config/ff/ff.conf`, seeds a capture baseline (so your existing
 sessions are **not** back-captured), and enables the timers (break-guard tick plus the
-winddown/windup day-shape bookends).
+wrap/begin day-shape bookends).
 
 Make sure `~/.local/bin` is on your `PATH` so `ff-afk` works from any terminal.
 
@@ -397,9 +407,9 @@ journalctl --user -u ff.service   # service logs
 
 Edit `~/.config/ff/ff.conf`. Every knob (timings, enable/disable each
 feature, capture model, notification stacking, output location) is documented in
-[`config/ff.conf.example`](config/ff.conf.example). The winddown/windup timers read a
-separate `~/.config/ff/ff-winddown.env` — see
-[winddown/windup configuration](#winddownwindup-configuration).
+[`config/ff.conf.example`](config/ff.conf.example). The wrap/begin timers read a
+separate `~/.config/ff/ff-workday.env` — see
+[wrap/begin configuration](#wrapbegin-configuration).
 
 ## Uninstall
 

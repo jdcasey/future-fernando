@@ -1,9 +1,0 @@
-[Unit]
-Description=windup — morning orientation from the previous day's winddown
-
-[Service]
-Type=oneshot
-# Optional env (FERN_WINDUP_KEY, FERN_WINDUP_DIALOG, …); shared with winddown.
-EnvironmentFile=-%h/.config/ff/ff-winddown.env
-# Needs the desktop session env for zenity/notify-send (imported by install.sh).
-ExecStart=%h/.local/bin/ff-windup

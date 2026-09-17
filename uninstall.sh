@@ -25,18 +25,23 @@ CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ff"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ff"
 
 echo "==> Disabling timers"
-systemctl --user disable --now ff.timer ff-winddown.timer ff-windup.timer 2>/dev/null || true
-# the fftf-* prefix layout and pre-Fern timers, in case an old install is still around
+systemctl --user disable --now ff.timer ff-wrap.timer ff-begin.timer 2>/dev/null || true
+# the ff-winddown/ff-windup names (pre begin/wrap rename), the fftf-* prefix layout,
+# and pre-Fern timers, in case an old install is still around
+systemctl --user disable --now ff-winddown.timer ff-windup.timer 2>/dev/null || true
 systemctl --user disable --now fftf.timer fftf-winddown.timer fftf-windup.timer 2>/dev/null || true
 systemctl --user disable --now focusguard.timer winddown.timer windup.timer 2>/dev/null || true
 
 echo "==> Removing units, scripts, and libs"
 rm -f "$UNIT_DIR/ff.timer" "$UNIT_DIR/ff.service" \
+      "$UNIT_DIR/ff-wrap.timer" "$UNIT_DIR/ff-wrap.service" \
+      "$UNIT_DIR/ff-begin.timer" "$UNIT_DIR/ff-begin.service" \
       "$UNIT_DIR/ff-winddown.timer" "$UNIT_DIR/ff-winddown.service" \
       "$UNIT_DIR/ff-windup.timer" "$UNIT_DIR/ff-windup.service"
 rm -f "$BIN_DIR/ff-tick" "$BIN_DIR/ff-capture" "$BIN_DIR/ff-afk" \
       "$BIN_DIR/ff-status" "$BIN_DIR/ff-pause" "$BIN_DIR/ff-unpause" \
-      "$BIN_DIR/ff-winddown" "$BIN_DIR/ff-windup" "$BIN_DIR/ff-save-progress-hook"
+      "$BIN_DIR/ff-wrap" "$BIN_DIR/ff-begin" "$BIN_DIR/ff-save-progress-hook" \
+      "$BIN_DIR/ff-winddown" "$BIN_DIR/ff-windup"
 # the fftf-* prefix layout
 rm -f "$UNIT_DIR/fftf.service" "$UNIT_DIR/fftf.timer" \
       "$UNIT_DIR/fftf-winddown.service" "$UNIT_DIR/fftf-winddown.timer" \

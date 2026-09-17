@@ -1,0 +1,9 @@
+[Unit]
+Description=Fernando — begin (morning orientation from the previous day's wrap)
+
+[Service]
+Type=oneshot
+# Optional env (FERN_BEGIN_KEY, FERN_BEGIN_DIALOG, FERN_BEGIN_APPEND, …); shared with wrap.
+EnvironmentFile=-%h/.config/ff/ff-workday.env
+# Needs the desktop session env for zenity/notify-send (imported by install.sh).
+ExecStart=%h/.local/bin/ff-begin

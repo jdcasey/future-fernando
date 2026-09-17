@@ -50,10 +50,10 @@ if ! command -v pactl >/dev/null 2>&1; then
   echo "    NOTE: pactl not found — audio presence (mic/speaker) signals will be inert."
   echo "          Break guard still works on desktop idle. Install pipewire-utils/pulseaudio-utils to enable them."
 fi
-# zenity drives the winddown interview popups; the break guard doesn't need it.
+# zenity drives the wrap interview popups; the break guard doesn't need it.
 if ! command -v zenity >/dev/null 2>&1; then
-  echo "    NOTE: zenity not found — the winddown end-of-day interview can't prompt."
-  echo "          Break guard/capture are unaffected. Install zenity to use winddown."
+  echo "    NOTE: zenity not found — the wrap end-of-day interview can't prompt."
+  echo "          Break guard/capture are unaffected. Install zenity to use wrap."
 fi
 
 # Retire units and binaries from the pre-Fern layout (focusguard / fg-* / winddown
@@ -85,6 +85,15 @@ rm -f "$BIN_DIR/fftf-tick" "$BIN_DIR/fftf-capture" "$BIN_DIR/fftf-afk" \
       "$BIN_DIR/fftf-winddown" "$BIN_DIR/fftf-windup" "$BIN_DIR/fftf-save-progress-hook"
 rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/fftf"
 
+# Retire the ff-winddown/ff-windup names (renamed to ff-wrap/ff-begin) so the
+# rename doesn't leave the old timers firing alongside the new ones. Their shared
+# config migrates separately (below); only units and scripts are removed here.
+echo "==> Retiring ff-winddown/ff-windup units and scripts (if present)"
+systemctl --user disable --now ff-winddown.timer ff-windup.timer 2>/dev/null || true
+rm -f "$UNIT_DIR/ff-winddown.service" "$UNIT_DIR/ff-winddown.timer" \
+      "$UNIT_DIR/ff-windup.service" "$UNIT_DIR/ff-windup.timer"
+rm -f "$BIN_DIR/ff-winddown" "$BIN_DIR/ff-windup"
+
 # One-time config/state migration from the fftf-* layout to ff-*. Preserves the
 # user's settings and capture baseline; rewrites FFTF_ vars to FERN_ in the config.
 OLD_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fftf"
@@ -94,12 +103,19 @@ if [ -f "$OLD_CONF_DIR/fftf.conf" ] && [ ! -f "$CONF_DIR/ff.conf" ]; then
   mkdir -p "$CONF_DIR"
   sed 's/FFTF_/FERN_/g; s/fftf/ff/g' "$OLD_CONF_DIR/fftf.conf" > "$CONF_DIR/ff.conf"
 fi
-if [ -f "$OLD_CONF_DIR/fftf-winddown.env" ] && [ ! -f "$CONF_DIR/ff-winddown.env" ]; then
-  echo "==> Migrating $OLD_CONF_DIR/fftf-winddown.env -> $CONF_DIR/ff-winddown.env"
+if [ -f "$OLD_CONF_DIR/fftf-winddown.env" ] && [ ! -f "$CONF_DIR/ff-workday.env" ]; then
+  echo "==> Migrating $OLD_CONF_DIR/fftf-winddown.env -> $CONF_DIR/ff-workday.env"
   mkdir -p "$CONF_DIR"
-  sed 's/FFTF_/FERN_/g; s/fftf/ff/g' "$OLD_CONF_DIR/fftf-winddown.env" > "$CONF_DIR/ff-winddown.env"
+  sed 's/FFTF_/FERN_/g; s/fftf/ff/g; s/FERN_WINDUP_/FERN_BEGIN_/g' "$OLD_CONF_DIR/fftf-winddown.env" > "$CONF_DIR/ff-workday.env"
 fi
 rm -rf "$OLD_CONF_DIR"
+# Migrate the ff-winddown.env name (pre begin/wrap rename) -> ff-workday.env, and
+# rewrite the renamed FERN_WINDUP_* vars to FERN_BEGIN_*.
+if [ -f "$CONF_DIR/ff-winddown.env" ] && [ ! -f "$CONF_DIR/ff-workday.env" ]; then
+  echo "==> Migrating $CONF_DIR/ff-winddown.env -> $CONF_DIR/ff-workday.env"
+  sed 's/FERN_WINDUP_/FERN_BEGIN_/g' "$CONF_DIR/ff-winddown.env" > "$CONF_DIR/ff-workday.env"
+  rm -f "$CONF_DIR/ff-winddown.env"
+fi
 if [ -d "$OLD_STATE_DIR" ] && [ ! -d "$STATE_DIR" ]; then
   echo "==> Migrating state $OLD_STATE_DIR -> $STATE_DIR"
   mv "$OLD_STATE_DIR" "$STATE_DIR"
@@ -115,17 +131,17 @@ install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt"
 
 echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
-for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-winddown ff-windup; do
+for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-wrap ff-begin; do
   install -m 0755 "$here/bin/$cmd" "$BIN_DIR/$cmd"
 done
-# Example winddown save-progress hook, installed to a space-free path so it's easy
-# to reference from ff-winddown.env (point FERN_SAVE_PROGRESS_CMD at it).
+# Example wrap save-progress hook, installed to a space-free path so it's easy
+# to reference from ff-workday.env (point FERN_SAVE_PROGRESS_CMD at it).
 install -m 0755 "$here/contrib/save-progress-hook.sh" "$BIN_DIR/ff-save-progress-hook"
 
 echo "==> Installing systemd user units to $UNIT_DIR"
 mkdir -p "$UNIT_DIR"
 for u in ff.service ff.timer \
-         ff-winddown.service ff-winddown.timer ff-windup.service ff-windup.timer; do
+         ff-wrap.service ff-wrap.timer ff-begin.service ff-begin.timer; do
   install -m 0644 "$here/systemd/$u" "$UNIT_DIR/$u"
 done
 
@@ -159,16 +175,16 @@ echo "==> Enabling timers"
 systemctl --user daemon-reload
 # Make the desktop session env (dbus/wayland) available to the services.
 systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
-systemctl --user enable --now ff.timer ff-winddown.timer ff-windup.timer
+systemctl --user enable --now ff.timer ff-wrap.timer ff-begin.timer
 
 echo
 echo "Installed. Timers:"
-systemctl --user list-timers ff.timer ff-winddown.timer ff-windup.timer --no-pager 2>/dev/null | sed -n '1,4p' || true
+systemctl --user list-timers ff.timer ff-wrap.timer ff-begin.timer --no-pager 2>/dev/null | sed -n '1,4p' || true
 echo
 echo "Make sure $BIN_DIR is on your PATH so 'ff-afk' works everywhere."
 echo "Check state any time with:  ff-status       (add --log to see detections)"
 echo "Step away / can't break:    ff-afk  /  ff-pause"
 echo "Test a scan now with:       systemctl --user start ff.service"
 echo "Try/compare capture with:   ff-capture --compare --latest"
-echo "Test winddown now (fast):   FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-winddown --now"
-echo "To wire save-progress, see: contrib/save-progress-hook.sh + docs/winddown-design.md"
+echo "Test wrap now (fast):       FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now"
+echo "To wire save-progress, see: contrib/save-progress-hook.sh + docs/wrap-design.md"
