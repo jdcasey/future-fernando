@@ -5,6 +5,6 @@ Description=Fernando — wrap (end-of-day extraction sequence)
 Type=simple
 # Optional env (FERN_SAVE_PROGRESS_CMD, FERN_GOODNIGHT_CMD, timing overrides, …).
 EnvironmentFile=-%h/.config/ff/ff-workday.env
-# Lives ~45 min while it walks the sequence; needs the desktop session env for
-# zenity/notify-send (imported by install.sh, mirroring Fern).
+# Lives through the lead delay plus however long the interview sits open; needs the
+# desktop session env for zenity/notify-send (imported by install.sh, mirroring Fern).
 ExecStart=%h/.local/bin/ff-wrap

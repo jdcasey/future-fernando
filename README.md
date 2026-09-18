@@ -86,9 +86,12 @@ capture run every couple of minutes, these fire once a day. Both notify under th
 **Fernando**. (Incubating — see
 [`docs/wrap-design.md`](docs/wrap-design.md) for rationale and open decisions.)
 
-**wrap** (Mon–Fri, 3:15pm) gradually pulls you out of deep focus. It poses four
-interview questions, each as a **zenity popup** that re-shows every ~2 min until you
-answer (the nag), spaced ~10 min apart:
+**wrap** (Mon–Fri) pulls you out of deep focus at day's end in one pass. First a
+**heads-up notification** fires `FERN_LEAD_MIN` (default 15) minutes ahead — "almost
+time to wrap up" — so you can find a stopping point *before* the interview interrupts you.
+Then the whole interview appears as a **single dialog**, all questions at once — each
+question a full-width label with a wide answer box stacked below it (rendered with `yad`
+if installed, otherwise `zenity`):
 
 1. What did you get done today?
 2. What's most important to start with tomorrow? (a **multi-line box** — bullet lists
@@ -97,10 +100,13 @@ answer (the nag), spaced ~10 min apart:
 3. In one line: the 1–2 things to start with first. (the short version begin resurfaces)
 4. Any special items for today's summary?
 
-After the last answer it runs the **save-progress hook**, then a final "you're all done"
-notification. Answers accumulate in `<state>/YYYY-MM-DD.md`, each tagged with a
-stable `<!-- wd:KEY -->` marker so other tools can extract a specific answer. Adding the
-short question lets the routine run a little longer rather than starting earlier.
+The dialog doesn't re-show on a short timer (that clobbered answers in progress) — it sits
+open. Its only limit is an overall cap, `FERN_FORM_TIMEOUT_SEC` (default 1 hour): if you
+haven't submitted by then, wrap **still runs save-progress, just without the interview
+answers**, so the day is captured either way. After you submit (or the cap passes) it runs
+the **save-progress hook**, then a **nag-style "step away now"** notification. Answers
+accumulate in `<state>/YYYY-MM-DD.md`, each tagged with a stable `<!-- wd:KEY -->` marker so
+other tools can extract a specific answer.
 
 **begin** (Mon–Fri, 9am) reads your **previous working day's** file and resurfaces the
 short "1–2 things to start with" answer (a zenity popup + notification) so you begin
@@ -110,8 +116,8 @@ for older files). Set `FERN_BEGIN_APPEND` to add a fixed footer line (e.g. a nud
 your journal). On each run it also grooms the day-files directory, pruning files older than
 `FERN_DAY_RETAIN_DAYS`.
 
-To avoid popups all evening on a day you walk away, wrap hard-stops `FERN_HARD_STOP_MIN`
-minutes after it starts (default 120). Nothing is saved if it backstops mid-interview. Tuning,
+If you close the form without answering, it re-shows (the nag) until you submit or the
+`FERN_FORM_TIMEOUT_SEC` cap passes — after which the day is saved without answers. Tuning,
 the save-progress hook, and the full config table are in
 [wrap/begin configuration](#wrapbegin-configuration).
 
@@ -329,10 +335,10 @@ no shell quoting; read by both units):
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `FERN_START` | `15:15` | Clock time the sequence anchors to |
-| `FERN_INTERVAL_MIN` | `10` | Minutes between question slots |
-| `FERN_NAG_SEC` | `120` | Re-show the popup this often until answered |
-| `FERN_HARD_STOP_MIN` | `120` | Safety backstop after start |
+| `FERN_START` | `15:15` | Clock time of the heads-up notification (the interview opens `FERN_LEAD_MIN` later) |
+| `FERN_LEAD_MIN` | `15` | Minutes between the heads-up and the interview |
+| `FERN_FORM_TIMEOUT_SEC` | `3600` | Cap on the whole interview (seconds); past it, save-progress runs without answers. `0` = no cap |
+| `FERN_HARD_STOP_MIN` | `120` | Backstop for the pre-interview wait (guards a mis-set `FERN_START` on a manual launch) |
 | `FERN_SOUND_ENABLED` | `1` | Play chimes |
 | `FERN_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook (**required**); a command, run with `FERN_ANSWERS_FILE` exported |
 | `FERN_SAVE_PROGRESS_HOOK` | `~/.local/bin/ff-save-progress-hook` | Fallback hook path; used if `FERN_SAVE_PROGRESS_CMD` is unset and this is executable |
@@ -342,7 +348,7 @@ no shell quoting; read by both units):
 | `FERN_BEGIN_APPEND` | *(empty)* | Fixed footer line appended to the begin notification |
 | `FERN_DAY_RETAIN_DAYS` | `7` | begin prunes day files older than N days (`0` = keep all) |
 
-Test the flow immediately (no waiting for 3:15): `FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now`.
+Test the flow immediately (no anchor wait, no lead delay): `FERN_LEAD_MIN=0 ff-wrap --now`.
 
 ### save-progress hook (required)
 
@@ -369,8 +375,8 @@ Test the hook by hand before trusting it to the timer.
 path) in the day file, and a `critical` notification on failure that evening — so a
 headless run you can't watch live is reviewable after the fact.
 
-The `FERN_GOODNIGHT_CMD` seam (step 5) is where a presence-aware persistent clock-off nag
-would compose in; unset, step 5 is a single notification.
+The `FERN_GOODNIGHT_CMD` seam (the final step) is where a presence-aware persistent
+clock-off nag would compose in; unset, the final step is a single nag notification.
 
 ## Command reference
 
@@ -383,7 +389,7 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
 | `ff-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
 | `ff-unpause` | End an active pause early. |
 | `ff-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
-| `ff-wrap [--now]` | Run the end-of-day interview sequence. `--now` starts immediately instead of anchoring to `FERN_START`. |
+| `ff-wrap [--now]` | Run the end-of-day interview sequence (heads-up → forms interview → save → nag). `--now` skips the anchor wait to `FERN_START` (still waits `FERN_LEAD_MIN`). |
 | `ff-begin` | Resurface the previous working day's "start with" note. |
 | `ff-tick` | **Internal** — one scan pass (break guard + capture). Run by `ff.timer` every ~2 min. |
 
@@ -401,8 +407,9 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
   `glib2` (`gdbus`), and `flock`.
 - Optional: `pactl` (PipeWire/PulseAudio) for the `audio-in` / `audio-out` presence signals.
   Without it the break guard still works on desktop idle; the audio signals are simply inert.
-- Optional: `zenity` for the wrap end-of-day interview popups. Without it the break
-  guard and capture are unaffected; only wrap can't prompt.
+- Optional: `yad` (preferred) or `zenity` for the wrap end-of-day interview dialog — `yad`
+  gives the stacked full-width layout, `zenity` a label-left grid fallback. Without either,
+  the break guard and capture are unaffected; only wrap can't prompt.
 
 ## Install
 

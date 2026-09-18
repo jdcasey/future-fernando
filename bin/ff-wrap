@@ -13,56 +13,68 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# wrap — end-of-day extraction sequence (design draft, incubating).
+# wrap — end-of-day extraction sequence.
 #
-# Walks a fixed sequence of interview questions, each delivered as a zenity popup
-# that re-shows every ~2 min (the nag) until answered. Questions advance on a
-# ~10-min rhythm but never before their slot AND never past an unanswered one
-# ("hold rhythm" + "keep nagging"). After the last answer it runs the
-# save-progress hook, then a final "you're done" notification.
+# Fires once on a weekday afternoon:
+#   1. a heads-up notification ("almost time to wrap up"), FERN_LEAD_MIN minutes
+#      before the interview, so you can find a stopping point;
+#   2. the whole interview as a single zenity forms dialog — every question at
+#      once, with NO time limit, so it sits untouched until you submit (a
+#      re-showing popup would clobber an answer in progress);
+#   3. the save-progress hook;
+#   4. a nag-style "be done now" notification.
 #
-# Trigger this from a systemd user timer at 15:15 Mon-Fri (see systemd/). For
-# testing, run with --now (start immediately) and a short interval, e.g.:
-#   FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now
+# Trigger this from a systemd user timer at the heads-up time Mon-Fri (see
+# systemd/). For testing, skip the anchor wait and the lead:
+#   FERN_LEAD_MIN=0 ff-wrap --now
 set -uo pipefail
 
 # ---- config (env-overridable; a config file can be added later) -------------
 : "${FERN_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/ff}"
-: "${FERN_START:=15:15}"          # clock time the sequence anchors to
-: "${FERN_INTERVAL_MIN:=10}"      # spacing between question slots (minutes)
-: "${FERN_NAG_SEC:=120}"          # re-show the popup this often until answered
-: "${FERN_HARD_STOP_MIN:=120}"    # safety backstop: stop nagging N min after start
+: "${FERN_START:=15:15}"          # clock time of the heads-up notification
+: "${FERN_LEAD_MIN:=15}"          # minutes from the heads-up to the interview
+: "${FERN_HARD_STOP_MIN:=120}"    # backstop for the pre-interview wait (guards a mis-set FERN_START on a manual launch)
+: "${FERN_FORM_TIMEOUT_SEC:=3600}" # cap on the whole interview phase (0 = no cap); on expiry, save-progress runs WITHOUT interview answers
 : "${FERN_SOUND_ENABLED:=1}"
-# Step 4 hook (REQUIRED). Run with FERN_ANSWERS_FILE exported (the day's Q/A
+# Step 3 hook (REQUIRED). Run with FERN_ANSWERS_FILE exported (the day's Q/A
 # markdown). The interview is pointless if its answers can't be persisted, so wrap
 # refuses to run without one (see the preflight below). Wire it either here, or by
 # dropping an executable at FERN_SAVE_PROGRESS_HOOK.
 : "${FERN_SAVE_PROGRESS_CMD:=}"
 : "${FERN_SAVE_PROGRESS_HOOK:=$HOME/.local/bin/ff-save-progress-hook}"
-# Step 5 hook ("have a good evening"). If set, it is run instead of the plain
-# one-shot notify — the seam for composing a presence-aware persistent clock-off
-# nag (e.g. a Fern 'ff-goodnight'). Empty = a single notification.
+# Step 4 hook ("be done now"). If set, it is run instead of the plain one-shot
+# notify — the seam for composing a presence-aware persistent clock-off nag
+# (e.g. a Fern 'ff-goodnight'). Empty = a single nag notification.
 : "${FERN_GOODNIGHT_CMD:=}"
 
 # The interview. Each entry is "key|kind|question": the key is a stable marker
 # written into the day file so other tools (e.g. begin) can extract a specific
-# answer even if the wording changes; kind is the input widget — "entry" for a
-# single line, "multi" for a multi-line box (bullet lists welcome).
+# answer even if the wording changes; kind ("entry"/"multi") only steers the
+# zenity fallback's widget — the yad renderer gives every answer a full-width box.
+# Avoid a ": " inside a question: with yad the label is passed as "question:LBL",
+# and a trailing "…:TYPE" token could be misread as a field type.
 QUESTIONS=(
-  "done|entry|It's almost time to be done today. What did you get done?"
+  "done|entry|What did you get done today?"
   "tomorrow|multi|What's most important to start with tomorrow? Check your calendar. Bullet lists welcome — this goes to your day file/journal in full."
-  "top|entry|In one line: the 1–2 things to start with first. This is what tomorrow morning's reminder shows."
-  "special|entry|Are there any special items that should be included in today's summary?"
+  "top|entry|In one line — the 1–2 things to start with first (tomorrow morning's reminder shows this)."
+  "special|entry|Any special items that should be included in today's summary?"
 )
 
-# Seeded into multi-line boxes as a header/prompt (this zenity's --text-info has
-# no label option); everything the user types goes below it and we strip the rest.
-MULTILINE_SEP=">>> type your answer below (bullet lists welcome) <<<"
+# Field separator for the forms output. The ASCII unit separator won't occur in
+# typed text, so multi-line answers and blank fields both survive the split.
+FORM_SEP=$'\x1f'
 
 START_NOW=0
 [ "${1:-}" = "--now" ] && START_NOW=1
 
-command -v zenity >/dev/null 2>&1 || { echo "wrap: zenity is required" >&2; exit 1; }
+# The interview needs a dialog tool. Prefer yad (roomier, question-above-field
+# layout); fall back to zenity's grid form.
+HAVE_YAD=0; command -v yad    >/dev/null 2>&1 && HAVE_YAD=1
+HAVE_ZENITY=0; command -v zenity >/dev/null 2>&1 && HAVE_ZENITY=1
+if [ "$HAVE_YAD" = 0 ] && [ "$HAVE_ZENITY" = 0 ]; then
+  echo "wrap: need 'yad' or 'zenity' to run the interview" >&2
+  exit 1
+fi
 
 FERN_LOG_DIR="$FERN_STATE_DIR/log"
 mkdir -p "$FERN_STATE_DIR" "$FERN_LOG_DIR" 2>/dev/null || true
@@ -101,65 +113,143 @@ else
 fi
 hard_stop=$(( start_epoch + FERN_HARD_STOP_MIN * 60 ))
 
-# Ask one question, re-showing every FERN_NAG_SEC until a non-empty answer is
-# given, or the hard backstop is hit. Prints the answer on stdout; returns 1 if
-# the backstop aborted the sequence.
-ask_until_answered() {
-  local kind="$1" q="$2" ans rc first=1
+# Present the WHOLE interview as one dialog — every question at once. It does NOT
+# re-show on a short timer (that clobbered answers in progress); it just sits open.
+# The only limit is the overall cap FERN_FORM_TIMEOUT_SEC, passed to the dialog as
+# the remaining time so a left-open form auto-closes exactly at the cap. If you
+# close/cancel it before the cap, it re-shows (the nag).
+#
+# Two renderers share one field separator (FORM_SEP, an ASCII unit separator that
+# won't occur in typed text, so answers split cleanly):
+#   yad (preferred) — question as a full-width label (:LBL) with a full-width
+#     multi-line box (:TXT) below it, stacked. yad emits an EMPTY output field for
+#     each :LBL, so answers land at odd indices; and it escapes newlines/tabs in
+#     :TXT output as literal \n \t, which we unescape.
+#   zenity (fallback) — a grid --forms dialog (label-left), one field per question.
+
+# Undo yad's escaping of control chars in :TXT output (\n -> newline, \t -> tab).
+# Safe for zenity too: if the text has no such literals the sed is a no-op.
+unescape_yad() { printf '%s' "$1" | sed -e 's/\\t/\t/g' -e 's/\\n/\n/g'; }
+
+# Fill the global `answers` (one entry per question, in order) from yad output.
+# Returns 0 if at least one answer is non-empty.
+parse_yad() {
+  local raw="$1" joined i
+  local -a f
+  IFS="$FORM_SEP" read -r -d '' -a f < <(printf '%s' "$raw")
+  answers=()
+  for ((i=0; i<${#QUESTIONS[@]}; i++)); do
+    answers+=("$(unescape_yad "${f[$((2*i+1))]:-}")")   # answer k at output index 2k+1
+  done
+  joined="${raw//$FORM_SEP/}"; joined="${joined//[[:space:]]/}"
+  [ -n "$joined" ]
+}
+
+# Same, for zenity --forms output (one output field per question, no LBL empties).
+parse_zenity() {
+  local raw="$1" joined
+  IFS="$FORM_SEP" read -r -d '' -a answers < <(printf '%s' "$raw")
+  joined="${raw//$FORM_SEP/}"; joined="${joined//[[:space:]]/}"
+  [ -n "$joined" ]
+}
+
+answers=()
+run_interview() {
+  local raw rc first=1 entry rest kind q remaining cap
+  local -a a
   while :; do
-    if [ "$(now)" -ge "$hard_stop" ]; then
-      notify "Stopping for now — backstop reached. Nothing was saved." critical
-      return 1
+    remaining=$(( interview_deadline - $(now) ))
+    if [ "$remaining" -le 0 ]; then
+      notify "No wrap answers within the cap — saving the day without them." critical
+      return 2
     fi
-    [ "$first" = 1 ] && chime message || { chime dialog-warning; notify "Still waiting: $q" critical; }
-    first=0
-    if [ "$kind" = multi ]; then
-      # Seed the question into the editable box (no label option here), then
-      # strip the header back off so only the typed answer remains.
-      ans=$(printf '%s\n\n%s\n\n' "$q" "$MULTILINE_SEP" \
-            | zenity --text-info --editable --title="Fernando" \
-                     --width=560 --height=340 --timeout="$FERN_NAG_SEC" 2>/dev/null)
-      rc=$?
-      if [[ $ans == *"$MULTILINE_SEP"* ]]; then ans="${ans#*"$MULTILINE_SEP"}"; fi
-      ans="${ans#"${ans%%[![:space:]]*}"}"   # ltrim
-      ans="${ans%"${ans##*[![:space:]]}"}"   # rtrim
+    if [ "$first" = 1 ]; then
+      chime message
     else
-      ans=$(zenity --entry --title="Fernando" --width=520 \
-                   --text="$q" --timeout="$FERN_NAG_SEC" 2>/dev/null)
-      rc=$?
+      chime dialog-warning
+      notify "The wrap-up interview is still waiting." critical
     fi
-    # rc 0 = OK; 1 = cancel; 5 = timeout. Only a non-empty OK counts.
-    if [ "$rc" = 0 ] && [ -n "${ans//[[:space:]]/}" ]; then
-      printf '%s\n' "$ans"
-      return 0
+    first=0
+    cap=0; [ "${FERN_FORM_TIMEOUT_SEC:-0}" -gt 0 ] 2>/dev/null && cap=1
+    if [ "$HAVE_YAD" = 1 ]; then
+      a=(--form --columns=1 --scroll --width=680 --height=620 --title="Fernando"
+         --text="Wrap-up interview — fill in what applies, then click OK."
+         --separator="$FORM_SEP")
+      [ "$cap" = 1 ] && a+=(--timeout="$remaining" --timeout-indicator=bottom)
+      for entry in "${QUESTIONS[@]}"; do
+        q="${entry#*|}"; q="${q#*|}"
+        a+=(--field="$q:LBL" --field=":TXT")
+      done
+      raw=$(yad "${a[@]}" 2>/dev/null); rc=$?
+      if [ "$rc" = 0 ] && parse_yad "$raw"; then return 0; fi
+    else
+      a=(--forms --title="Fernando"
+         --text="Wrap-up interview — fill in what applies, then press OK."
+         --separator="$FORM_SEP")
+      [ "$cap" = 1 ] && a+=(--timeout="$remaining")
+      for entry in "${QUESTIONS[@]}"; do
+        rest="${entry#*|}"; kind="${rest%%|*}"; q="${rest#*|}"
+        case "$kind" in
+          multi) a+=(--add-multiline-entry="$q");;
+          *)     a+=(--add-entry="$q");;
+        esac
+      done
+      raw=$(zenity "${a[@]}" 2>/dev/null); rc=$?
+      if [ "$rc" = 0 ] && parse_zenity "$raw"; then return 0; fi
     fi
-    # otherwise loop: nag and re-show
+    # closed/cancelled/timed-out or all-blank: loop (re-checks the cap at the top)
+    sleep 2
   done
 }
 
 # ---- run the sequence -------------------------------------------------------
+# Wait until the heads-up time (the timer normally fires us at FERN_START; this
+# only bites on an early manual launch), then warn and sleep the lead.
+while [ "$(now)" -lt "$start_epoch" ]; do
+  sleep 15
+  [ "$(now)" -ge "$hard_stop" ] && { notify "Wrap stopped (backstop)." critical; exit 1; }
+done
+
+notify "Almost time to wrap up the day. The interview opens in ${FERN_LEAD_MIN} min — start finding a stopping point." normal
+chime message
+sleep $(( FERN_LEAD_MIN * 60 ))
+
+# Interview (one dialog, all questions), capped at FERN_FORM_TIMEOUT_SEC from the
+# moment it opens. Past the cap with no answer, we still save the day (below),
+# just without interview answers.
+if [ "${FERN_FORM_TIMEOUT_SEC:-0}" -gt 0 ] 2>/dev/null; then
+  interview_deadline=$(( $(now) + FERN_FORM_TIMEOUT_SEC ))
+else
+  interview_deadline=$(( $(now) + 315360000 ))   # ~10y = effectively no cap
+fi
+run_interview; iv_rc=$?
+
+# Header for today, written after the interview resolves so an aborted lead
+# leaves no stray file.
 {
   printf '# Wrap — %s\n\n' "$(date '+%A %Y-%m-%d')"
 } >> "$day_file"
 
-i=0
-for entry in "${QUESTIONS[@]}"; do
-  key="${entry%%|*}"; rest="${entry#*|}"; kind="${rest%%|*}"; q="${rest#*|}"
-  slot=$(( start_epoch + i * FERN_INTERVAL_MIN * 60 ))
-  # Hold the rhythm: never pose a question before its slot.
-  while [ "$(now)" -lt "$slot" ]; do
-    sleep 15
-    [ "$(now)" -ge "$hard_stop" ] && { notify "Wrap stopped (backstop)." critical; exit 1; }
+if [ "$iv_rc" = 0 ]; then
+  i=0
+  for entry in "${QUESTIONS[@]}"; do
+    key="${entry%%|*}"; rest="${entry#*|}"; q="${rest#*|}"
+    ans="${answers[i]:-}"
+    ans="${ans#"${ans%%[![:space:]]*}"}"   # ltrim
+    ans="${ans%"${ans##*[![:space:]]}"}"   # rtrim
+    {
+      printf '### %s\n<!-- wd:%s -->\n\n%s\n\n' "$q" "$key" "$ans"
+    } >> "$day_file"
+    i=$(( i + 1 ))
   done
-
-  answer=$(ask_until_answered "$kind" "$q") || exit 1
+else
+  # iv_rc == 2: cap reached with no answer — note it, then save the day anyway.
   {
-    printf '### %s\n<!-- wd:%s -->\n\n%s\n\n' "$q" "$key" "$answer"
+    printf '_Interview not completed within the %d-min cap; saved without answers._\n\n' "$(( FERN_FORM_TIMEOUT_SEC / 60 ))"
   } >> "$day_file"
-  i=$(( i + 1 ))
-done
+fi
 
-# ---- step 4: save-progress hook ---------------------------------------------
+# ---- step 3: save-progress hook ---------------------------------------------
 # The hook is an unattended headless run, so capture EVERYTHING for diagnosis:
 # full stdout+stderr to a dated log, and a keyed result line in the day file
 # for the record.
@@ -185,13 +275,13 @@ else
   notify "save-progress FAILED (exit $sp_rc) — see $sp_log" critical
 fi
 
-# ---- step 5: done -----------------------------------------------------------
+# ---- step 4: be done (nag) --------------------------------------------------
 chime complete
 if [ -n "$FERN_GOODNIGHT_CMD" ]; then
   # Composable seam: hand off to a presence-aware persistent clock-off nag
-  # (e.g. Fern's ff-goodnight). Falls back to a plain notify if unset.
+  # (e.g. Fern's ff-goodnight). Falls back to a plain nag notify if unset.
   FERN_ANSWERS_FILE="$day_file" bash -c "$FERN_GOODNIGHT_CMD"
 else
-  notify "You're all done! Have a good evening!" normal
+  notify "That's it — you're done for today. Wrap up and step away from the keyboard now, and nobody gets hurt!" critical
 fi
 exit 0

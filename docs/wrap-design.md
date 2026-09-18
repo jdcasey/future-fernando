@@ -6,58 +6,78 @@ with a shared `ff-workday.env`; shared *code* helpers (notify/chime) are still t
 
 ## Goal
 
-Gradually pull me out of deep-focus work so I'm mentally done by **4:00pm** on
-weekdays. The sequence starts at **3:15pm** to leave buffer for the final
-`/save-progress` run. Each stage notifies me so I *notice* the transition; the
-interview stages require a typed response and **nag every 2 min until I answer**.
+Pull me out of deep-focus work so I'm mentally done by end of day on weekdays,
+**without working right up to the interview**. A heads-up notification fires a lead
+window ahead so I can find a stopping point *before* the interview interrupts; then the
+whole interview arrives at once, with no time pressure, and the day is saved.
 
 ## Sequence
 
-1. **interview** — "It's almost time to be done today. What did you get done?"
-2. **interview (multi-line)** — "What's most important to start with tomorrow? Check
-   your calendar." Full detail; bullet lists welcome (this zenity's `--text-info` has no
-   label, so the question is seeded into the editable box and stripped back off the reply).
-3. **interview** — "In one line: the 1–2 things to start with first." The short version
-   `begin` resurfaces (keeps the morning notification brief, full detail stays in the file).
-4. **interview** — "Are there any special items that should be included in today's
-   summary?"
-5. **run-skill** — `/save-progress`, incorporating the interview answers (esp. the
+1. **heads-up notify** — "Almost time to wrap up the day. The interview opens in N min —
+   start finding a stopping point." Fires `FERN_LEAD_MIN` (default 15) before the interview.
+2. **interview** — the whole thing as **one dialog** (all questions at once):
+   - "What did you get done today?"
+   - (multi-line) "What's most important to start with tomorrow? Check your calendar."
+     Full detail; bullet lists welcome.
+   - "In one line: the 1–2 things to start with first." The short version `begin`
+     resurfaces (keeps the morning notification brief, full detail stays in the file).
+   - "Any special items that should be included in today's summary?"
+3. **run-hook** — the save-progress hook, incorporating the interview answers (esp. the
    special items).
-6. **notify** — "You're all done! Have a good evening!"
+4. **nag notify** — "That's it — you're done. Wrap up and step away now." A `critical`
+   (sticky) nag, not a soft sign-off.
 
 ## Timing model
 
-- **Trigger:** systemd user timer, `Mon..Fri 15:15`.
-- **Question rhythm:** ~10 min apart → 3:15 / 3:25 / 3:35 / 3:45, so `/save-progress`
-  fires ~3:55. The extra (short) question lengthens the run rather than starting it
-  earlier — save-progress finishes with time to spare, so the later end is accepted.
-- **Nag:** within a question's window, re-prompt every 2 min until answered.
+- **Trigger:** systemd user timer at the heads-up time, `Mon..Fri` (public default
+  `15:15`).
+- **Heads-up → interview:** `FERN_LEAD_MIN` minutes (default 15). So the default timer at
+  15:15 warns at 15:15 and opens the interview at 15:30.
+- **No short re-show timer:** the dialog doesn't re-pop on a short timer (that was
+  clobbering answers in progress) — it sits open. The only limit is an overall cap,
+  `FERN_FORM_TIMEOUT_SEC` (default 1 h), passed to the dialog as the *remaining* time so a
+  left-open form auto-closes exactly at the cap. Past the cap with no answer, wrap still
+  runs save-progress — just **without** interview answers — so the day is saved either way.
+  If the dialog is *closed* before the cap, it re-shows (the nag).
 
-## Architecture sketch (draft — pending decisions)
+## Architecture
 
-- **Runner:** a single long-lived process started at 3:15 (lives ~45 min). Per
-  question it shows a response prompt, blocks for input with a 2-min timeout (the
-  timeout *is* the nag — re-show on expiry), then sleeps to the next slot. After
-  the last answer it invokes `/save-progress`, then the final notify.
-  - *Alt:* Fern-style 2-min tick + on-disk state (survives logout/suspend,
-    but more moving parts). Chosen model depends on the "no-reply" decision below.
-- **Responses:** accumulate in `<state>/YYYY-MM-DD.md`, one Q/A block
-  each, so `/save-progress` can consume them and so there's a daily record.
+- **Runner:** a single process started by the timer. It waits to `FERN_START` (a no-op
+  when the timer fires it on time; guards an early manual launch), sends the heads-up,
+  sleeps the lead, then shows the dialog. On submit — or once `FERN_FORM_TIMEOUT_SEC`
+  passes with no answer — it writes the day file, runs the save-progress hook, and fires the
+  nag.
+- **One dialog, many fields — two renderers, one separator.** Preferred: **`yad --form`**
+  (`--columns=1 --scroll`), each question as a full-width label (`:LBL`) with a full-width
+  multi-line box (`:TXT`) stacked below it — the question-line / answer-field-line layout.
+  Fallback when yad is absent: **`zenity --forms`** (`--add-entry` / `--add-multiline-entry`,
+  a label-left grid; multi-line forms fields need zenity ≥ 4.2). Both join fields with an
+  ASCII unit separator (`\x1f`, which won't occur in typed text) and split back into answers
+  aligned with the question order; multi-line answers and blank middle fields both survive.
+  Two yad quirks handled on the way out: `:LBL` emits an empty output field (so answers land
+  at odd indices), and `:TXT` escapes newlines/tabs to literal `\n`/`\t` (unescaped on read).
+- **Responses:** accumulate in `<state>/YYYY-MM-DD.md`, one Q/A block each (written only
+  after a successful submit), so the hook can consume them and there's a daily record.
 
-## Decisions (2026-09-15)
+## Decisions
 
-- [x] Response mechanism: **zenity popup** (free-text; re-shows as the nag).
-- [x] Early-answer pacing: **hold the 10-min rhythm** (don't advance before a slot).
-- [x] No-reply: **keep nagging until answered** — plus a hard backstop
-      (`FERN_HARD_STOP_MIN`, default 180) so a walked-away day doesn't pop dialogs
-      all evening. NB: hold-rhythm + keep-nagging means the schedule can slip past
-      4pm if answers are slow; accepted.
+- [x] Response mechanism: **single dialog, all questions at once** — **`yad --form`**
+      preferred (full-width question label above a full-width multi-line box, stacked),
+      **`zenity --forms`** as the fallback.
+- [x] Lead warning: **heads-up notification `FERN_LEAD_MIN` before the interview** so I
+      stop working *before* being interrupted, not at the moment of interruption.
+- [x] No short re-show timer: **don't re-pop the dialog on a short timer** — that was
+      clobbering in-progress typing. Re-show only if the dialog is actively *closed*.
+- [x] Overall cap: **`FERN_FORM_TIMEOUT_SEC` (default 1 h)** caps the whole interview
+      phase; past it, **save-progress runs without the interview answers** so a walked-away
+      day is still captured, rather than saving nothing.
+- [x] Final step: **a nag-style `critical` "step away now"**, not a soft sign-off.
 - [x] ~~Standalone project~~ **Folded into Fern** (2026-09-16); no shared *code*
       yet (own notify/chime helpers, own `FERN_*` config) — that unification is deferred.
 - [x] "Check your calendar" is a *reminder*, not a calendar integration.
 - [x] Language: **bash** for now (Python still open; more of a candidate here).
 
-## save-progress step (step 4)
+## save-progress step (step 3)
 
 - [x] **Pluggable and REQUIRED** via `FERN_SAVE_PROGRESS_CMD` (run with
       `FERN_ANSWERS_FILE` exported), or an executable at `FERN_SAVE_PROGRESS_HOOK`
@@ -71,23 +91,22 @@ interview stages require a typed response and **nag every 2 min until I answer**
       markdown document of the interview Q/A. What it does with that is entirely
       up to the hook (write a journal, call an API, run an agent). For unattended
       systemd runs: wrap long-running hooks in `timeout` (the interview backstop
-      doesn't cover step 4) and use absolute paths (user services don't inherit
+      doesn't cover the save step) and use absolute paths (user services don't inherit
       your interactive `PATH`). Test by hand before trusting it to the timer.
-- [x] **Diagnosis wired:** step-4 output+exit go to
+- [x] **Diagnosis wired:** the save step's output+exit go to
       `<state>/log/save-progress-DATE.log`; a `wd:save_result` marker
       lands in the day file; failure -> critical notify that evening.
 
-## Good-evening (step 5) — composition
+## Be-done nag (final step) — composition
 
-Decision pending, but the plan: keep the "have a good evening" as a **pluggable
-hook** (`FERN_GOODNIGHT_CMD`, already wired; default = one-shot notify). The
-recommended composition is a NEW Fern feature (`ff-goodnight`) that provides
-a **presence-aware, escalating, sticky clock-off nag** — because Fern already
-owns presence detection + escalation + acknowledgment, and a "you should be logged
-off" nag is the inverse of its break nag, and it should STOP once you actually
-leave the keyboard (which wrap can't detect on its own). wrap's step 5
-would just trigger it. If Fern isn't installed, the plain notify is the
-fallback. Not built yet — awaiting go-ahead.
+The final step is a **pluggable hook** (`FERN_GOODNIGHT_CMD`, already wired; default =
+a one-shot `critical` "step away now" nag notification). The recommended composition is a
+NEW Fern feature (`ff-goodnight`) that provides a **presence-aware, escalating, sticky
+clock-off nag** — because Fern already owns presence detection + escalation +
+acknowledgment, and a "you should be logged off" nag is the inverse of its break nag, and
+it should STOP once you actually leave the keyboard (which wrap can't detect on its own).
+wrap's final step would just trigger it. If Fern isn't installed, the plain nag notify is
+the fallback. Not built yet — awaiting go-ahead.
 
 ## begin (morning bookend)
 
