@@ -62,15 +62,19 @@ day file, and `FERN_BEGIN_APPEND` nudges toward the journal ("look at yesterday'
 for more"). Open question: should begin (or the save step) treat a richer journal as the
 canonical "more detail" source, and how much should the day file duplicate it?
 
-**Deferred deliberately.** The save action is pluggable (`FERN_SAVE_PROGRESS_CMD`), and the
-daily-driver wires it to Claude + Logseq — a large, personal investment we do NOT want to
-bake into the tool. It is not automatic that another user has a journaling piece at all, or
-that their save command produces anything beyond the day file. So begin must keep working
-from the day file alone, and any journal coupling stays optional.
+**Deferred deliberately.** The save action is a user-supplied hook
+(`FERN_SAVE_PROGRESS_CMD`), and a given user's hook may wire it to a richer journaling
+system — a personal investment we do NOT want to bake into the tool. It is not automatic
+that another user has a journaling piece at all, or that their hook produces anything beyond
+the day file. So begin must keep working from the day file alone, and any journal coupling
+stays optional.
 
 - [ ] Decide the contract later: does the day file stay self-sufficient (begin never needs
       the journal), or does begin gain an optional, configurable "open/summarize the journal"
       path for users who have one? Keep the day-file-only path as the floor either way.
+- [ ] Optional bundled hook: a generic `save-progress` that just appends the day file to a
+      dated markdown diary, so the tool is useful out-of-the-box without a bespoke hook.
+      Floated 2026-09-18; low priority — unclear it's worth the maintenance yet.
 
 ## Calendar presence (distant optional — deferred)
 

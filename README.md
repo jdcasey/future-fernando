@@ -334,7 +334,8 @@ no shell quoting; read by both units):
 | `FERN_NAG_SEC` | `120` | Re-show the popup this often until answered |
 | `FERN_HARD_STOP_MIN` | `120` | Safety backstop after start |
 | `FERN_SOUND_ENABLED` | `1` | Play chimes |
-| `FERN_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook; run with `FERN_ANSWERS_FILE` exported |
+| `FERN_SAVE_PROGRESS_CMD` | *(empty)* | Step-4 hook (**required**); a command, run with `FERN_ANSWERS_FILE` exported |
+| `FERN_SAVE_PROGRESS_HOOK` | `~/.local/bin/ff-save-progress-hook` | Fallback hook path; used if `FERN_SAVE_PROGRESS_CMD` is unset and this is executable |
 | `FERN_GOODNIGHT_CMD` | *(empty)* | Step-5 hook; empty = one-shot "good evening" notify |
 | `FERN_BEGIN_KEY` | `top` | Which wrap answer begin resurfaces (falls back to `tomorrow`) |
 | `FERN_BEGIN_DIALOG` | `1` | begin shows a zenity popup (plus notification) |
@@ -343,15 +344,25 @@ no shell quoting; read by both units):
 
 Test the flow immediately (no waiting for 3:15): `FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now`.
 
-### save-progress hook
+### save-progress hook (required)
 
-The save step is pluggable via `FERN_SAVE_PROGRESS_CMD`. `install.sh` installs a starter hook
-to `~/.local/bin/ff-save-progress-hook` (source: [`contrib/save-progress-hook.sh`](contrib/save-progress-hook.sh))
-that runs a Claude Code skill headlessly with the interview answers as context; point
-`FERN_SAVE_PROGRESS_CMD` at it. Two gotchas for systemd runs: wrap it in `timeout` (the
-interview backstop doesn't cover the save step), and set `FERN_CLAUDE_BIN` to the absolute
-`claude` path (user services don't inherit your PATH). Test by hand before trusting it to
-the timer.
+The save step is a **user-supplied hook** — this tool ships none, because how you persist a
+day's answers is personal (a journal app, a notes repo, a markdown file, a headless agent
+run). **`begin` and `wrap` refuse to run without one**: the interview only earns its
+interruption if the answers can actually be saved, so both fail fast with a notification if no
+hook is wired.
+
+Wire it one of two ways:
+
+- Set `FERN_SAVE_PROGRESS_CMD` to a command (this takes precedence), or
+- Drop an executable at `FERN_SAVE_PROGRESS_HOOK` (default `~/.local/bin/ff-save-progress-hook`).
+
+**Contract.** The hook is invoked with `FERN_ANSWERS_FILE` exported — the path to the day
+file, a markdown document of the interview Q/A (see `docs/wrap-design.md`). Do whatever you
+like with it; the exit code is recorded. Two gotchas for systemd runs: wrap long-running
+hooks in `timeout` (the interview backstop doesn't cover the save step), and use absolute
+paths for anything you shell out to (user services don't inherit your interactive `PATH`).
+Test the hook by hand before trusting it to the timer.
 
 **Diagnosis.** Every save-progress run is logged: full stdout+stderr to
 `<state>/log/save-progress-YYYY-MM-DD.log`, a `wd:save_result` line (exit + log

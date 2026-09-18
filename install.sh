@@ -134,9 +134,10 @@ mkdir -p "$BIN_DIR"
 for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-wrap ff-begin; do
   install -m 0755 "$here/bin/$cmd" "$BIN_DIR/$cmd"
 done
-# Example wrap save-progress hook, installed to a space-free path so it's easy
-# to reference from ff-workday.env (point FERN_SAVE_PROGRESS_CMD at it).
-install -m 0755 "$here/contrib/save-progress-hook.sh" "$BIN_DIR/ff-save-progress-hook"
+# NOTE: the save-progress step is a REQUIRED, user-supplied hook (begin/wrap
+# refuse to run without one). This tool ships no hook — see docs/wrap-design.md
+# for the contract. Drop an executable at $BIN_DIR/ff-save-progress-hook (a
+# space-free path) or point FERN_SAVE_PROGRESS_CMD at your own command.
 
 echo "==> Installing systemd user units to $UNIT_DIR"
 mkdir -p "$UNIT_DIR"
@@ -187,4 +188,6 @@ echo "Step away / can't break:    ff-afk  /  ff-pause"
 echo "Test a scan now with:       systemctl --user start ff.service"
 echo "Try/compare capture with:   ff-capture --compare --latest"
 echo "Test wrap now (fast):       FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now"
-echo "To wire save-progress, see: contrib/save-progress-hook.sh + docs/wrap-design.md"
+echo "REQUIRED: wire a save-progress hook (begin/wrap won't run without one)."
+echo "          drop an executable at $BIN_DIR/ff-save-progress-hook, or set"
+echo "          FERN_SAVE_PROGRESS_CMD. Contract: docs/wrap-design.md"

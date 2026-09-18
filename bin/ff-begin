@@ -25,10 +25,23 @@ set -uo pipefail
 : "${FERN_BEGIN_DIALOG:=1}"        # 1 = zenity info popup (plus notify); 0 = notify only
 : "${FERN_BEGIN_APPEND:=}"         # optional footer text appended to the notification
 : "${FERN_DAY_RETAIN_DAYS:=7}"     # groom day files older than N days on begin (0 = keep all)
+# begin only resurfaces what wrap saved; the save step is pluggable and REQUIRED.
+: "${FERN_SAVE_PROGRESS_CMD:=}"
+: "${FERN_SAVE_PROGRESS_HOOK:=$HOME/.local/bin/ff-save-progress-hook}"
 
 notify() { notify-send -a Fernando -u "${2:-normal}" "Fernando" "$1" 2>/dev/null || true; }
 chime()  { [ "$FERN_SOUND_ENABLED" = 1 ] || return 0
            canberra-gtk-play -i "${1:-message}" >/dev/null 2>&1 || true; }
+
+# ---- preflight: begin is meaningless without a save-progress hook -----------
+# If no hook is wired, wrap can't persist answers and begin has nothing to
+# resurface — fail fast to surface the misconfiguration instead of going quiet.
+if [ -z "$FERN_SAVE_PROGRESS_CMD" ] && [ ! -x "$FERN_SAVE_PROGRESS_HOOK" ]; then
+  msg="No save-progress hook configured — begin has nothing to resurface. Provide an executable at $FERN_SAVE_PROGRESS_HOOK, or set FERN_SAVE_PROGRESS_CMD. See the README."
+  echo "begin: $msg" >&2
+  notify "$msg" critical
+  exit 1
+fi
 
 # Print the answer following a "<!-- wd:KEY -->" marker, up to the next blank line
 # or heading.  extract KEY FILE

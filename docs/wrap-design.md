@@ -59,22 +59,20 @@ interview stages require a typed response and **nag every 2 min until I answer**
 
 ## save-progress step (step 4)
 
-- [x] **Pluggable** via `FERN_SAVE_PROGRESS_CMD` (run with `FERN_ANSWERS_FILE`
-      exported) — keeps the tool reusable; each user wires their own.
-- [x] **My case:** run the `team-awareness:save-progress` skill headlessly via
-      `claude`, cwd = the personal-notes project dir (so `.temp`/MCP resolve),
-      with the interview Q&A supplied as context, MCP tools available, and **no
-      interactive prompts**. Must complete unattended.
-- [x] **Invocation confirmed** (claude 2.1.272): `-p` DOES run plugin skills —
-      pass `/team-awareness:save-progress` as the prompt. Non-interactive flags:
-      `--permission-mode dontAsk --permission-prompts none --allowedTools Skill`,
-      with `</dev/null`. `.mcp.json` + CLAUDE.md auto-load from cwd in `-p` mode.
-      Do NOT use `--dangerously-skip-permissions`. Context: inline in the prompt.
-      Starter hook: `contrib/save-progress-hook.sh`.
-- [ ] **Iterate:** under `dontAsk`, any tool NOT in `--allowedTools` is denied,
-      so the skill's MCP tools need adding once we learn their names (discover via
-      `claude -p "list your MCP tools" --output-format json`). Test by hand first.
-      User's stance: try/iterate rather than perfect upfront.
+- [x] **Pluggable and REQUIRED** via `FERN_SAVE_PROGRESS_CMD` (run with
+      `FERN_ANSWERS_FILE` exported), or an executable at `FERN_SAVE_PROGRESS_HOOK`
+      (default `~/.local/bin/ff-save-progress-hook`). This tool ships no hook — how
+      a day's answers get persisted is personal — so each user wires their own.
+- [x] **begin/wrap refuse to run without a hook.** The interview only earns its
+      interruption if the answers can be saved, so both scripts preflight for a
+      hook and fail fast (stderr + critical notify) if none is configured. The
+      old "answers saved to the day file, save-progress skipped" fallback is gone.
+- [x] **Contract:** the hook receives `FERN_ANSWERS_FILE` — the day file, a
+      markdown document of the interview Q/A. What it does with that is entirely
+      up to the hook (write a journal, call an API, run an agent). For unattended
+      systemd runs: wrap long-running hooks in `timeout` (the interview backstop
+      doesn't cover step 4) and use absolute paths (user services don't inherit
+      your interactive `PATH`). Test by hand before trusting it to the timer.
 - [x] **Diagnosis wired:** step-4 output+exit go to
       `<state>/log/save-progress-DATE.log`; a `wd:save_result` marker
       lands in the day file; failure -> critical notify that evening.
