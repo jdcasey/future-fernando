@@ -226,7 +226,11 @@ ff_break_away() {
   done
   # No signal produced a reading -> degrade to present, never fake a break.
   if [ -z "$best" ]; then best=0; src=none; fi
-  FERN_AWAY_SECONDS="$best"; FERN_AWAY_SOURCE="$src"
+  FERN_AWAY_SECONDS="$best"
+  # FERN_AWAY_SOURCE is an output global, read by callers (ff-status, ff-tick)
+  # after they source this lib — not unused, just consumed cross-file.
+  # shellcheck disable=SC2034
+  FERN_AWAY_SOURCE="$src"
 }
 
 # Back-compat wrapper: prints the away seconds (callers that also want the source
