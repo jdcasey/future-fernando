@@ -216,10 +216,14 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
 - Clicking/dismissing the banner does nothing by design (a glance-and-swat is exactly the
   failure this guards against).
 - Each nag also carries one **grounding suggestion** picked at random (breathing, 5-4-3-2-1,
-  and similar), under a "leave the room / look away from the screen" lead-in — a concrete
-  thing to do with the break, not just a command to take one. Edit the list at
-  `data/grounding.txt` (installed to `<data>/ff/data/grounding.txt`) to add your own;
-  turn it off with `FERN_GROUNDING_ENABLED=0` or point `FERN_GROUNDING_FILE` at your own file.
+  in-office movement, and similar), under a "leave the room / look away from the screen"
+  lead-in — a concrete thing to do with the break, not just a command to take one. The list
+  is a seed you tailor: each non-blank, non-`#` line is one `Name — instructions` suggestion,
+  and `# ...` lines are category headers/comments the reader ignores. Edit the installed copy
+  at `<data>/ff/data/grounding.txt` to add or trim your own — re-installs never overwrite it.
+  New shipped suggestions land in `<data>/ff/data/grounding.txt.dist` (refreshed every install)
+  so you can diff them in. Turn the feature off with `FERN_GROUNDING_ENABLED=0`, or point
+  `FERN_GROUNDING_FILE` at a file of your own.
 
 ### Rolling detection log
 

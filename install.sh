@@ -127,7 +127,16 @@ install -m 0644 "$here"/lib/*.sh "$LIB_DIR/"
 
 echo "==> Installing data to $DATA_DIR"
 mkdir -p "$DATA_DIR"
-install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt"
+# grounding.txt is a user-tailorable seed: install the live copy only if absent,
+# so re-installs never clobber personal edits. Always refresh the .dist reference
+# so users can diff in newly-shipped suggestions on their own terms.
+install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt.dist"
+if [ -f "$DATA_DIR/grounding.txt" ]; then
+  echo "    keeping existing $DATA_DIR/grounding.txt (see grounding.txt.dist for new seeds)"
+else
+  install -m 0644 "$here"/data/grounding.txt "$DATA_DIR/grounding.txt"
+  echo "    wrote $DATA_DIR/grounding.txt"
+fi
 
 echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
