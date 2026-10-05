@@ -140,7 +140,7 @@ fi
 
 echo "==> Installing scripts to $BIN_DIR"
 mkdir -p "$BIN_DIR"
-for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-wrap ff-begin; do
+for cmd in ff-tick ff-capture ff-afk ff-status ff-pause ff-unpause ff-reset ff-wrap ff-begin; do
   install -m 0755 "$here/bin/$cmd" "$BIN_DIR/$cmd"
 done
 # NOTE: the save-progress step is a REQUIRED, user-supplied hook (begin/wrap
@@ -194,6 +194,7 @@ echo
 echo "Make sure $BIN_DIR is on your PATH so 'ff-afk' works everywhere."
 echo "Check state any time with:  ff-status       (add --log to see detections)"
 echo "Step away / can't break:    ff-afk  /  ff-pause"
+echo "Guard missed a real break:  ff-reset        (credits it now, resets the clock)"
 echo "Test a scan now with:       systemctl --user start ff.service"
 echo "Try/compare capture with:   ff-capture --compare --latest"
 echo "Test wrap now (fast):       FERN_INTERVAL_MIN=1 FERN_NAG_SEC=20 ff-wrap --now"

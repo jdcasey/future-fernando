@@ -40,6 +40,7 @@ rm -f "$UNIT_DIR/ff.timer" "$UNIT_DIR/ff.service" \
       "$UNIT_DIR/ff-windup.timer" "$UNIT_DIR/ff-windup.service"
 rm -f "$BIN_DIR/ff-tick" "$BIN_DIR/ff-capture" "$BIN_DIR/ff-afk" \
       "$BIN_DIR/ff-status" "$BIN_DIR/ff-pause" "$BIN_DIR/ff-unpause" \
+      "$BIN_DIR/ff-reset" \
       "$BIN_DIR/ff-wrap" "$BIN_DIR/ff-begin" "$BIN_DIR/ff-save-progress-hook" \
       "$BIN_DIR/ff-winddown" "$BIN_DIR/ff-windup"
 # the fftf-* prefix layout

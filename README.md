@@ -215,6 +215,29 @@ Audio signals are **additive** — combine with `idle` for the away baseline. Th
   disable the guard all day; `ff-unpause` ends it early.
 - Clicking/dismissing the banner does nothing by design (a glance-and-swat is exactly the
   failure this guards against).
+
+**When the guard misses a real break.** The break is credited only by a ≥`FERN_ACTIVITY_GAP`
+gap in which *every enabled presence signal* reads absent. Signals stack (smallest away-gap
+wins), so any one signal that keeps reading "present" holds the clock even while you are
+physically gone — and the nag keeps escalating. The usual culprit is `audio-in`: a mic that
+stays open through a long meeting reads as present the whole time, so stepping away for coffee
+with the mic hot never credits the break. (Idle drift from a twitchy pointer can do the same
+to the `idle` signal.) Diagnose it from the detection log: `ff-status --log` — if you see
+`away=0 src=audio-in` while `idle=` climbs past `FERN_ACTIVITY_GAP`, that is the mic holding
+you present.
+
+Two fixes:
+
+- **Clear it now:** run `ff-reset`. It credits the break by hand and resets the stretch clock
+  (the same `credit-break` action a real gap triggers) and dismisses the banner. Because it
+  bypasses the "only a real gap counts" rule, it is deliberately high-friction: you must type
+  `ff-reset` correctly three times in a row (any slip aborts, clock untouched), and it refuses
+  to run without an interactive terminal — there is no bypass flag, by design.
+- **Stop it recurring:** change `FERN_PRESENCE` in `~/.config/ff/ff.conf` so the misreading
+  signal no longer votes — e.g. `FERN_PRESENCE="idle"` drops `audio-in` so only
+  keyboard/mouse idle holds the clock. Trade-off: during a call where you are listening (not
+  typing) the guard will credit a break after `FERN_ACTIVITY_GAP` of idle rather than keeping
+  the stretch alive — acceptable if your meetings are where you most need `ff-reset` today.
 - Each nag also carries one **grounding suggestion** picked at random (breathing, 5-4-3-2-1,
   in-office movement, and similar), under a "leave the room / look away from the screen"
   lead-in — a concrete thing to do with the break, not just a command to take one. The list
@@ -392,6 +415,7 @@ All commands install to `~/.local/bin`. `ff-tick` is run by the timer; the rest 
 | `ff-afk` | "Stepping away now" — hush the nag and open a short grace window. Does **not** credit a break. |
 | `ff-pause [DURATION]` | Silence the nag without crediting a break (clock keeps running). Bare number = minutes; suffixes `s`/`m`/`h`. Default 30 min, capped at 2h. |
 | `ff-unpause` | End an active pause early. |
+| `ff-reset` | **Escape hatch** — credit the break by hand and reset the stretch clock *now*. Use when the guard missed a real break (e.g. a hot mic held you "present") and is stuck nagging. **Gated:** you must type `ff-reset` correctly three times in a row (any slip aborts), and it refuses without an interactive terminal. See "When the guard misses a real break" below. |
 | `ff-capture [OPTS] <TARGET>` | Run capture on one session on demand. `--dry-run`, `--compare` (both backends side by side), `--backend NAME`, `--model NAME`, `--latest`; `<TARGET>` = transcript path, session uuid, or `--latest`. |
 | `ff-wrap [--now]` | Run the end-of-day interview sequence (heads-up → forms interview → save → nag). `--now` skips the anchor wait to `FERN_START` (still waits `FERN_LEAD_MIN`). |
 | `ff-begin` | Resurface the previous working day's "start with" note. |
@@ -436,6 +460,7 @@ ff-status --log                           # rolling detection log (diagnose the 
 ff-afk                                     # I'm stepping away — hush the nag now
 ff-pause 30m                               # I can't break yet — hush without crediting one
 ff-unpause                                 # end a pause early
+ff-reset                                   # guard missed a real break — credit it now, reset the clock
 ff-capture --compare --latest             # try capture backends on a real session
 systemctl --user start ff.service # run one scan right now
 journalctl --user -u ff.service   # service logs
